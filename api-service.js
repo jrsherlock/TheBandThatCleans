@@ -5,8 +5,8 @@
 
 // Configuration - Update these values after deploying your Google Apps Script
 const API_CONFIG = {
-  // Replace with your deployed Google Apps Script Web App URL
-  BASE_URL: 'https://script.google.com/macros/s/AKfycbyDxwxwsN14CYvHS8mGgVcFYMWjFAykVBNUlAx0fW7E7wXi9rE2_vgwrKNn_Ezq6X6M/exec',
+  // Google Apps Script Web App URL (TBTC - MVP with CORS fixes - Deployed 2025-09-30)
+  BASE_URL: 'https://script.google.com/macros/s/AKfycby3TU0sevcweBobP4OgDvFyfyK42G0rnKP8EHaF62IeTHIsXtUg5g6cTUXpLsX6XHB3/exec',
     
   // API key for authentication (matches MOCK_API_KEY in Code.gs)
   API_KEY: 'tbtc-director-key-2024',
@@ -38,25 +38,22 @@ const delay = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 
 /**
  * Enhanced fetch with timeout, retries, and error handling
+ * IMPORTANT: Google Apps Script has CORS limitations with POST requests
+ * Solution: Use GET requests with URL parameters for all operations
  */
 async function fetchWithRetry(url, options = {}, retries = API_CONFIG.MAX_RETRIES) {
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), API_CONFIG.TIMEOUT);
 
   try {
-    // For GET requests, don't set Content-Type to avoid CORS preflight
     const fetchOptions = {
       ...options,
-      signal: controller.signal
+      signal: controller.signal,
+      redirect: 'follow'  // Follow redirects automatically
     };
 
-    // Only add Content-Type for POST requests with body
-    if (options.method === 'POST' && options.body) {
-      fetchOptions.headers = {
-        'Content-Type': 'application/json',
-        ...options.headers
-      };
-    }
+    // Don't set Content-Type header to avoid CORS preflight
+    // Google Apps Script doesn't support OPTIONS requests properly
 
     const response = await fetch(url, fetchOptions);
 
@@ -136,7 +133,9 @@ class TbtcApiService {
   }
 
   /**
-   * POST request helper
+   * POST request helper (converted to GET to avoid CORS issues)
+   * WORKAROUND: Google Apps Script POST requests have redirect issues with fetch()
+   * Solution: Use GET with payload in URL parameter
    */
   async post(payload) {
     this.validateConfig();
@@ -146,9 +145,12 @@ class TbtcApiService {
       apiKey: this.apiKey
     };
 
-    return fetchWithRetry(this.baseUrl, {
-      method: 'POST',
-      body: JSON.stringify(requestPayload)
+    // Convert POST to GET with payload parameter
+    const payloadParam = encodeURIComponent(JSON.stringify(requestPayload));
+    const url = `${this.baseUrl}?action=update&payload=${payloadParam}`;
+
+    return fetchWithRetry(url, {
+      method: 'GET'
     });
   }
 

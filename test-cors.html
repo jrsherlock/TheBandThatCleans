@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CORS Test - TBTC MVP</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 50px auto;
+            padding: 20px;
+        }
+        button {
+            padding: 10px 20px;
+            margin: 10px 5px;
+            font-size: 16px;
+            cursor: pointer;
+        }
+        #output {
+            margin-top: 20px;
+            padding: 15px;
+            background: #f5f5f5;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            white-space: pre-wrap;
+            font-family: monospace;
+            font-size: 12px;
+        }
+        .success { color: green; }
+        .error { color: red; }
+    </style>
+</head>
+<body>
+    <h1>TBTC MVP - CORS Test</h1>
+    <p>Testing Google Apps Script CORS behavior with different Content-Type headers</p>
+    
+    <div>
+        <button onclick="testGetRequest()">Test GET Request</button>
+        <button onclick="testPostTextPlain()">Test POST (text/plain)</button>
+        <button onclick="testPostJSON()">Test POST (application/json)</button>
+        <button onclick="clearOutput()">Clear Output</button>
+    </div>
+    
+    <div id="output"></div>
+
+    <script>
+        const API_URL = 'https://script.google.com/macros/s/AKfycbw_VdFtIOhKbCT6VLNW3URWVsbi0rH2p8ClN0LbNxLz1Oh4uTDdZLFULnzMbdNyUikW/exec';
+        const API_KEY = 'tbtc-director-key-2024';
+        
+        function log(message, isError = false) {
+            const output = document.getElementById('output');
+            const timestamp = new Date().toLocaleTimeString();
+            const className = isError ? 'error' : 'success';
+            output.innerHTML += `<span class="${className}">[${timestamp}] ${message}</span>\n`;
+            output.scrollTop = output.scrollHeight;
+        }
+        
+        function clearOutput() {
+            document.getElementById('output').innerHTML = '';
+        }
+        
+        async function testGetRequest() {
+            log('Testing GET request...');
+            try {
+                const response = await fetch(`${API_URL}?action=data`);
+                const data = await response.json();
+                log(`✅ GET request successful! Received ${data.lots?.length || 0} lots`);
+                log(`Response: ${JSON.stringify(data).substring(0, 200)}...`);
+            } catch (error) {
+                log(`❌ GET request failed: ${error.message}`, true);
+            }
+        }
+        
+        async function testPostTextPlain() {
+            log('Testing POST request with Content-Type: text/plain...');
+            try {
+                const payload = {
+                    type: 'UPDATE_BULK_STATUS',
+                    lotIds: [101],
+                    status: 'in-progress',
+                    apiKey: API_KEY
+                };
+                
+                const response = await fetch(API_URL, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'text/plain; charset=UTF-8'
+                    },
+                    body: JSON.stringify(payload)
+                });
+                
+                const data = await response.json();
+                
+                if (data.error) {
+                    log(`⚠️  POST (text/plain) returned error: ${data.error}`, true);
+                } else {
+                    log(`✅ POST (text/plain) successful!`);
+                    log(`Response: ${JSON.stringify(data)}`);
+                }
+            } catch (error) {
+                log(`❌ POST (text/plain) failed: ${error.message}`, true);
+            }
+        }
+        
+        async function testPostJSON() {
+            log('Testing POST request with Content-Type: application/json...');
+            log('⚠️  This will trigger a CORS preflight OPTIONS request');
+            try {
+                const payload = {
+                    type: 'UPDATE_BULK_STATUS',
+                    lotIds: [101],
+                    status: 'in-progress',
+                    apiKey: API_KEY
+                };
+                
+                const response = await fetch(API_URL, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(payload)
+                });
+                
+                const data = await response.json();
+                
+                if (data.error) {
+                    log(`⚠️  POST (application/json) returned error: ${data.error}`, true);
+                } else {
+                    log(`✅ POST (application/json) successful!`);
+                    log(`Response: ${JSON.stringify(data)}`);
+                }
+            } catch (error) {
+                log(`❌ POST (application/json) failed: ${error.message}`, true);
+                log(`This is expected - Google Apps Script doesn't support OPTIONS preflight`, true);
+            }
+        }
+        
+        // Auto-run tests on page load
+        window.addEventListener('load', () => {
+            log('=== CORS Test Suite Started ===');
+            log(`Testing endpoint: ${API_URL}`);
+            log('Click buttons above to run individual tests\n');
+        });
+    </script>
+</body>
+</html>
+

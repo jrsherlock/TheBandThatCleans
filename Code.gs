@@ -49,12 +49,17 @@ const VALID_LOT_STATUSES = ["not-started", "in-progress", "needs-help", "pending
 const MOCK_API_KEY = "tbtc-director-key-2024";
 
 /**
- * Main entry point for GET requests. Used primarily for fetching initial data or reports.
+ * Main entry point for GET requests. Handles both read and write operations via URL parameters.
+ * WORKAROUND: Using GET for all operations to avoid CORS preflight issues with POST requests.
  *
  * Supported endpoints:
+ * READ operations:
  * - ?action=data - Returns all lots and students data
  * - ?action=report - Returns attendance report data
  * - ?action=eventConfig - Returns event configuration (check-out toggle state)
+ *
+ * WRITE operations (pass data as JSON in 'payload' parameter):
+ * - ?action=update&payload={...} - Handle all update operations
  */
 function doGet(e) {
   try {
@@ -62,6 +67,7 @@ function doGet(e) {
 
     const action = e.parameter.action;
 
+    // Read operations
     if (action === "data") {
       return handleGetData();
     } else if (action === "report") {
@@ -70,7 +76,45 @@ function doGet(e) {
       return handleGetEventConfig();
     }
 
-    return createJsonResponse({ error: "Invalid GET action. Supported: data, report, eventConfig" }, 400);
+    // Write operations via GET (CORS workaround)
+    if (action === "update") {
+      if (!e.parameter.payload) {
+        return createJsonResponse({ error: "Missing 'payload' parameter" }, 400);
+      }
+
+      const payload = JSON.parse(decodeURIComponent(e.parameter.payload));
+
+      if (!checkAuth(e, payload)) {
+        return createJsonResponse({ error: "Unauthorized access. Valid API key required." }, 401);
+      }
+
+      const type = payload.type;
+
+      if (!type) {
+        return createJsonResponse({ error: "Missing 'type' field in payload" }, 400);
+      }
+
+      switch (type) {
+        case "UPDATE_LOT_STATUS":
+          return handleUpdateLotStatus(payload);
+        case "UPDATE_BULK_STATUS":
+          return handleUpdateBulkStatus(payload);
+        case "UPDATE_LOT_DETAILS":
+          return handleUpdateLotDetails(payload);
+        case "UPDATE_STUDENT_STATUS":
+          return handleUpdateStudentStatus(payload);
+        case "UPDATE_EVENT_CONFIG":
+          return handleUpdateEventConfig(payload);
+        case "OCR_UPLOAD":
+          return handleOcrUpload(payload);
+        default:
+          return createJsonResponse({
+            error: `Invalid update type: ${type}. Supported: UPDATE_LOT_STATUS, UPDATE_BULK_STATUS, UPDATE_LOT_DETAILS, UPDATE_STUDENT_STATUS, UPDATE_EVENT_CONFIG, OCR_UPLOAD`
+          }, 400);
+      }
+    }
+
+    return createJsonResponse({ error: "Invalid GET action. Supported: data, report, eventConfig, update" }, 400);
   } catch (error) {
     logError("doGet", error);
     return createJsonResponse({ error: error.toString() }, 500);
@@ -129,6 +173,16 @@ function doPost(e) {
     logError("doPost", error);
     return createJsonResponse({ error: error.toString() }, 500);
   }
+}
+
+/**
+ * Handles CORS preflight OPTIONS requests.
+ * Google Apps Script automatically sets CORS headers for publicly deployed Web Apps.
+ * This function just needs to return a valid response.
+ */
+function doOptions(e) {
+  return ContentService.createTextOutput(JSON.stringify({ status: 'ok' }))
+    .setMimeType(ContentService.MimeType.JSON);
 }
 
 // --- HANDLERS ---
@@ -758,6 +812,8 @@ function createJsonResponse(data, status = 200) {
     responseData.httpStatus = status;
   }
 
+  // Google Apps Script automatically sets CORS headers for publicly deployed Web Apps
+  // No need to manually set Access-Control-Allow-Origin headers
   return ContentService.createTextOutput(JSON.stringify(responseData))
     .setMimeType(ContentService.MimeType.JSON);
 }
