@@ -131,6 +131,22 @@ function doPost(e) {
   }
 }
 
+/**
+ * Handles OPTIONS requests (CORS preflight).
+ * This is required for cross-origin requests from browsers.
+ */
+function doOptions(e) {
+  return ContentService.createTextOutput()
+    .setMimeType(ContentService.MimeType.JSON)
+    .setContent(JSON.stringify({ status: 'ok' }))
+    .setHeaders({
+      'Access-Control-Allow-Origin': '*',
+      'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+      'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-Requested-With',
+      'Access-Control-Max-Age': '86400'
+    });
+}
+
 // --- HANDLERS ---
 
 /**
@@ -786,7 +802,7 @@ function readSheetData(sheetConfig) {
 }
 
 /**
- * Creates a standard JSON response object for the GAS Web App.
+ * Creates a standard JSON response object for the GAS Web App with CORS headers.
  */
 function createJsonResponse(data, status = 200) {
   // Add status to response data for client-side handling
@@ -796,7 +812,12 @@ function createJsonResponse(data, status = 200) {
   }
 
   return ContentService.createTextOutput(JSON.stringify(responseData))
-    .setMimeType(ContentService.MimeType.JSON);
+    .setMimeType(ContentService.MimeType.JSON)
+    .setHeaders({
+      'Access-Control-Allow-Origin': '*',
+      'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+      'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-Requested-With'
+    });
 }
 
 /**
