@@ -131,6 +131,22 @@ function doPost(e) {
   }
 }
 
+/**
+ * Handles OPTIONS requests (CORS preflight).
+ * This is required for cross-origin requests from browsers.
+ */
+function doOptions(e) {
+  return ContentService.createTextOutput()
+    .setMimeType(ContentService.MimeType.JSON)
+    .setContent(JSON.stringify({ status: 'ok' }))
+    .setHeaders({
+      'Access-Control-Allow-Origin': '*',
+      'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+      'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-Requested-With',
+      'Access-Control-Max-Age': '86400'
+    });
+}
+
 // --- HANDLERS ---
 
 /**
@@ -618,10 +634,14 @@ function handleOcrUpload(payload) {
 
       const extractedText = visionResponse.responses[0]?.fullTextAnnotation?.text || "No text detected";
 
-      // Store the image and OCR result with the lot
+      // Extract student count from OCR text
+      const extractedCount = extractStudentCount(extractedText);
+
+      // Store the image, OCR result, and student count with the lot
       const updateResult = handleUpdateLotDetails({
         lotId: payload.lotId,
         signUpSheetPhoto: payload.data,
+        totalStudentsSignedUp: extractedCount,
         updatedBy: payload.updatedBy || "OCR System"
       });
 
@@ -629,13 +649,14 @@ function handleOcrUpload(payload) {
         return updateResult;
       }
 
-      logInfo("handleOcrUpload", `OCR processed for lot ${payload.lotId}, extracted ${extractedText.length} characters`);
+      logInfo("handleOcrUpload", `OCR processed for lot ${payload.lotId}, extracted ${extractedText.length} characters, found ${extractedCount} students`);
 
       return createJsonResponse({
         success: true,
         ocrResult: extractedText,
+        extractedCount: extractedCount,
         lotId: payload.lotId,
-        message: "Image uploaded and text extracted successfully. Review the extracted text and manually update student statuses as needed."
+        message: "Image uploaded and text extracted successfully. Student count updated automatically."
       });
 
     } catch (visionError) {
@@ -721,6 +742,38 @@ function handleGetReport() {
 // --- UTILITY FUNCTIONS ---
 
 /**
+ * Extract student count from OCR text
+ * Counts non-empty lines that look like student names
+ */
+function extractStudentCount(ocrText) {
+  if (!ocrText || ocrText === "No text detected") {
+    return 0;
+  }
+
+  // Split by lines and filter
+  const lines = ocrText.split('\n');
+
+  // Filter out empty lines, headers, and noise
+  const studentLines = lines.filter(line => {
+    const trimmed = line.trim();
+
+    // Skip empty lines
+    if (trimmed.length < 2) return false;
+
+    // Skip common header patterns
+    if (trimmed.match(/^(Time|Lot|Zone|#|Sign|Sheet|Name|Student|Date)/i)) return false;
+
+    // Skip lines that are just numbers or special characters
+    if (trimmed.match(/^[\d\s\-:\/]+$/)) return false;
+
+    // Accept lines that look like names (contain letters)
+    return trimmed.match(/[a-zA-Z]{2,}/);
+  });
+
+  return studentLines.length;
+}
+
+/**
  * Reads all data from a specified sheet and returns it as an array of objects.
  */
 function readSheetData(sheetConfig) {
@@ -749,7 +802,7 @@ function readSheetData(sheetConfig) {
 }
 
 /**
- * Creates a standard JSON response object for the GAS Web App.
+ * Creates a standard JSON response object for the GAS Web App with CORS headers.
  */
 function createJsonResponse(data, status = 200) {
   // Add status to response data for client-side handling
@@ -759,7 +812,12 @@ function createJsonResponse(data, status = 200) {
   }
 
   return ContentService.createTextOutput(JSON.stringify(responseData))
-    .setMimeType(ContentService.MimeType.JSON);
+    .setMimeType(ContentService.MimeType.JSON)
+    .setHeaders({
+      'Access-Control-Allow-Origin': '*',
+      'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+      'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-Requested-With'
+    });
 }
 
 /**

@@ -2,18 +2,34 @@
 
 A comprehensive web platform for managing City High Band's post-game parking lot cleanup operations with zero operational costs using Google Apps Script and Google Sheets.
 
+## 🎯 MVP Version - Hybrid Paper/Digital Workflow
+
+**Current Branch**: `MVP`
+
+This MVP version implements a hybrid paper/digital workflow where:
+- **Students** sign physical paper sheets at each parking lot (no app interaction)
+- **Directors/Volunteers** upload photos of sign-in sheets via the web app
+- **OCR Processing** automatically extracts student counts from uploaded images
+- **Real-time Tracking** of lot status and progress continues as before
+
+### Why This Approach?
+- Eliminates need for students to have phones/QR codes
+- Faster sign-in process (no waiting for app to load)
+- Automatic student counting reduces manual data entry
+- Maintains digital tracking benefits for Directors
+
 ## 🎯 Project Overview
 
 The Band That Cleans (TBTC) platform transforms the existing React single-file component into a fully functional web application with real-time data persistence, multi-user support, and comprehensive reporting capabilities.
 
-### Key Features
+### Key Features (MVP)
 
 - **Real-time Lot Management**: Track parking lot cleanup status with live updates
-- **Student Check-in System**: Manage student attendance and lot assignments
-- **Multi-user Support**: Different views for directors, volunteers, and administrators
+- **OCR-Based Student Counting**: Upload photos of physical sign-in sheets for automatic student counting
+- **Image Upload Interface**: Drag-and-drop or browse to upload sign-in sheet photos
+- **Multi-user Support**: Different views for directors and volunteers
 - **Comprehensive Reporting**: Export detailed attendance and progress reports
-- **OCR Integration**: Upload and process sign-up sheet photos (optional)
-- **Zero Operational Costs**: Built entirely on free Google services
+- **Zero Operational Costs**: Built entirely on free Google services (Google Sheets + Cloud Vision API)
 
 ## 🏗️ Architecture
 
