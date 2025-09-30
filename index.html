@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🎵</text></svg>" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>The Band That Cleans - TBTC Platform</title>
+    <meta name="description" content="Zero-cost web platform for managing City High Band's parking lot cleanup operations" />
+    
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+      tailwind.config = {
+        darkMode: 'class',
+        theme: {
+          extend: {
+            fontFamily: {
+              'inter': ['Inter', 'system-ui', 'sans-serif'],
+            },
+            colors: {
+              'brand-blue': '#2563eb',
+              'brand-purple': '#7c3aed',
+            }
+          }
+        }
+      }
+    </script>
+    
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    
+    <style>
+      body {
+        font-family: 'Inter', system-ui, -apple-system, sans-serif;
+      }
+      
+      /* Custom scrollbar */
+      ::-webkit-scrollbar {
+        width: 6px;
+      }
+
+      ::-webkit-scrollbar-track {
+        background: #f1f5f9;
+      }
+
+      .dark ::-webkit-scrollbar-track {
+        background: #1e293b;
+      }
+
+      ::-webkit-scrollbar-thumb {
+        background: #cbd5e1;
+        border-radius: 3px;
+      }
+
+      .dark ::-webkit-scrollbar-thumb {
+        background: #475569;
+      }
+
+      ::-webkit-scrollbar-thumb:hover {
+        background: #94a3b8;
+      }
+
+      .dark ::-webkit-scrollbar-thumb:hover {
+        background: #64748b;
+      }
+      
+      /* Loading animation */
+      .loading-dots {
+        display: inline-block;
+        position: relative;
+        width: 80px;
+        height: 80px;
+      }
+      
+      .loading-dots div {
+        position: absolute;
+        top: 33px;
+        width: 13px;
+        height: 13px;
+        border-radius: 50%;
+        background: #2563eb;
+        animation-timing-function: cubic-bezier(0, 1, 1, 0);
+      }
+      
+      .loading-dots div:nth-child(1) {
+        left: 8px;
+        animation: loading-dots1 0.6s infinite;
+      }
+      
+      .loading-dots div:nth-child(2) {
+        left: 8px;
+        animation: loading-dots2 0.6s infinite;
+      }
+      
+      .loading-dots div:nth-child(3) {
+        left: 32px;
+        animation: loading-dots2 0.6s infinite;
+      }
+      
+      .loading-dots div:nth-child(4) {
+        left: 56px;
+        animation: loading-dots3 0.6s infinite;
+      }
+      
+      @keyframes loading-dots1 {
+        0% { transform: scale(0); }
+        100% { transform: scale(1); }
+      }
+      
+      @keyframes loading-dots3 {
+        0% { transform: scale(1); }
+        100% { transform: scale(0); }
+      }
+      
+      @keyframes loading-dots2 {
+        0% { transform: translate(0, 0); }
+        100% { transform: translate(24px, 0); }
+      }
+    </style>
+  </head>
+  <body>
+    <div id="root">
+      <!-- Fallback loading screen -->
+      <div class="min-h-screen bg-gradient-to-br from-blue-50 via-white to-purple-50 flex items-center justify-center">
+        <div class="text-center">
+          <div class="loading-dots mb-4">
+            <div></div>
+            <div></div>
+            <div></div>
+            <div></div>
+          </div>
+          <h1 class="text-2xl font-bold text-gray-900 mb-2">The Band That Cleans</h1>
+          <p class="text-gray-600">Loading platform...</p>
+        </div>
+      </div>
+    </div>
+    <script type="module" src="/src/main.jsx"></script>
+  </body>
+</html>
