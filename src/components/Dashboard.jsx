@@ -6,19 +6,19 @@
 import React, { useState, useMemo } from 'react';
 import {
   CheckCircle, Clock, Users, MapPin, AlertTriangle, Download, Bell, X,
-  Send, RefreshCw, Music
+  Send, RefreshCw
 } from 'lucide-react';
 import { BarChart, Bar, PieChart, Pie, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell } from 'recharts';
-import { format } from 'date-fns';
 import { motion } from 'framer-motion';
 import { toast } from 'react-hot-toast';
-import { isAdmin, isVolunteer, isStudent } from '../utils/permissions.js';
+import { isAdmin, isVolunteer } from '../utils/permissions.js';
 import { ProtectedButton } from './ProtectedComponents.jsx';
 
 const MotionDiv = motion.div;
 
 /**
  * Main Dashboard Component - Routes to role-specific dashboard
+ * MVP: Student dashboard removed - students no longer use the app
  */
 const Dashboard = ({ lots, students, stats, currentUser, onBulkStatusUpdate, onSendNotification, onExportReport, getStatusStyles, statuses, sections, useTheme, StatusBadge }) => {
   if (isAdmin(currentUser)) {
@@ -49,19 +49,8 @@ const Dashboard = ({ lots, students, stats, currentUser, onBulkStatusUpdate, onS
         StatusBadge={StatusBadge}
       />
     );
-  } else if (isStudent(currentUser)) {
-    return (
-      <StudentDashboard
-        lots={lots}
-        students={students}
-        stats={stats}
-        currentUser={currentUser}
-        getStatusStyles={getStatusStyles}
-        StatusBadge={StatusBadge}
-      />
-    );
   }
-  
+
   // Fallback for unknown role
   return (
     <div className="p-8 text-center">
@@ -459,165 +448,6 @@ const VolunteerDashboard = ({ lots, students, stats, getStatusStyles, statuses, 
   );
 };
 
-/**
- * Student Dashboard - Personal view for students
- * New functionality for student role
- */
-const StudentDashboard = ({ lots, students, stats, currentUser, getStatusStyles, StatusBadge }) => {
-  // Find current student's data
-  const currentStudent = students.find(s => s.id === currentUser.id);
-  const assignedLot = currentStudent?.assignedLot ? lots.find(l => l.id === currentStudent.assignedLot) : null;
-  const teammates = assignedLot ? students.filter(s => s.assignedLot === assignedLot.id && s.id !== currentUser.id) : [];
-
-  const percentageComplete = stats.totalLots > 0 ? Math.round(stats.completedLots / stats.totalLots * 100) : 0;
-
-  return (
-    <div className="space-y-6">
-      {/* Welcome Card */}
-      <div className="bg-gradient-to-r from-blue-600 to-purple-600 rounded-lg shadow-lg p-6 text-white">
-        <div className="flex items-center gap-3 mb-2">
-          <Music size={32} />
-          <h1 className="text-3xl font-bold">Welcome, {currentUser.name}!</h1>
-        </div>
-        <p className="text-blue-100">The Band That Cleans • Parking Lot Cleanup Event</p>
-      </div>
-
-      {/* Check-in Status Card */}
-      <div className="bg-white dark:bg-gray-800 rounded-lg shadow-lg p-6 transition-colors duration-200">
-        <h2 className="text-xl font-bold text-gray-900 dark:text-white mb-4">Your Status</h2>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div className="flex items-center gap-3">
-            <div className={`p-3 rounded-lg ${currentStudent?.checkedIn ? 'bg-green-100 dark:bg-green-900/40' : 'bg-gray-100 dark:bg-gray-700'}`}>
-              <CheckCircle className={currentStudent?.checkedIn ? 'text-green-600 dark:text-green-400' : 'text-gray-400'} size={24} />
-            </div>
-            <div>
-              <div className="text-sm text-gray-600 dark:text-gray-400">Check-in Status</div>
-              <div className="text-lg font-bold text-gray-900 dark:text-white">
-                {currentStudent?.checkedIn ? 'Checked In' : 'Not Checked In'}
-              </div>
-              {currentStudent?.checkInTime && (
-                <div className="text-xs text-gray-500 dark:text-gray-400">
-                  at {format(new Date(currentStudent.checkInTime), 'h:mm a')}
-                </div>
-              )}
-            </div>
-          </div>
-          <div className="flex items-center gap-3">
-            <div className={`p-3 rounded-lg ${assignedLot ? 'bg-blue-100 dark:bg-blue-900/40' : 'bg-gray-100 dark:bg-gray-700'}`}>
-              <MapPin className={assignedLot ? 'text-blue-600 dark:text-blue-400' : 'text-gray-400'} size={24} />
-            </div>
-            <div>
-              <div className="text-sm text-gray-600 dark:text-gray-400">Assigned Lot</div>
-              <div className="text-lg font-bold text-gray-900 dark:text-white">
-                {assignedLot ? assignedLot.name : 'Not Assigned'}
-              </div>
-              {assignedLot && (
-                <div className="text-xs text-gray-500 dark:text-gray-400 capitalize">
-                  {assignedLot.section} Section
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* Assigned Lot Details */}
-      {assignedLot && (
-        <div className="bg-white dark:bg-gray-800 rounded-lg shadow-lg p-6 transition-colors duration-200">
-          <h2 className="text-xl font-bold text-gray-900 dark:text-white mb-4">Your Lot Details</h2>
-          <div className="space-y-4">
-            <div className="flex items-center justify-between">
-              <span className="text-gray-600 dark:text-gray-400">Status:</span>
-              <StatusBadge status={assignedLot.status} />
-            </div>
-            {assignedLot.notes && (
-              <div className="p-3 bg-yellow-50 dark:bg-yellow-900/30 border border-yellow-200 dark:border-yellow-700 rounded-lg">
-                <div className="flex items-start gap-2">
-                  <AlertTriangle className="text-yellow-600 dark:text-yellow-400 flex-shrink-0 mt-0.5" size={16} />
-                  <div>
-                    <div className="font-medium text-yellow-800 dark:text-yellow-300 text-sm">Important Note:</div>
-                    <div className="text-yellow-700 dark:text-yellow-300 text-sm">{assignedLot.notes}</div>
-                  </div>
-                </div>
-              </div>
-            )}
-            {assignedLot.comment && (
-              <div className="p-3 bg-blue-50 dark:bg-blue-900/30 border border-blue-200 dark:border-blue-700 rounded-lg">
-                <div className="font-medium text-blue-800 dark:text-blue-300 text-sm mb-1">Director's Comment:</div>
-                <div className="text-blue-700 dark:text-blue-300 text-sm">{assignedLot.comment}</div>
-              </div>
-            )}
-          </div>
-        </div>
-      )}
-
-      {/* Teammates */}
-      {teammates.length > 0 && (
-        <div className="bg-white dark:bg-gray-800 rounded-lg shadow-lg p-6 transition-colors duration-200">
-          <h2 className="text-xl font-bold text-gray-900 dark:text-white mb-4">Your Team ({teammates.length} students)</h2>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-            {teammates.map(student => (
-              <div key={student.id} className="flex items-center gap-3 p-3 bg-gray-50 dark:bg-gray-700 rounded-lg">
-                <div className={`w-2 h-2 rounded-full ${student.checkedIn ? 'bg-green-500' : 'bg-gray-400'}`}></div>
-                <div className="flex-1">
-                  <div className="font-medium text-gray-900 dark:text-white">{student.name}</div>
-                  <div className="text-xs text-gray-600 dark:text-gray-400">{student.instrument} • {student.year}</div>
-                </div>
-                {student.checkedIn && (
-                  <CheckCircle className="text-green-500" size={16} />
-                )}
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* Event Progress */}
-      <div className="bg-white dark:bg-gray-800 rounded-lg shadow-lg p-6 transition-colors duration-200">
-        <h2 className="text-xl font-bold text-gray-900 dark:text-white mb-4">Event Progress</h2>
-        <div className="space-y-4">
-          <div>
-            <div className="flex justify-between items-center mb-2">
-              <span className="text-sm font-medium text-gray-700 dark:text-gray-300">Overall Completion</span>
-              <span className="text-sm font-bold text-blue-600 dark:text-blue-400">{percentageComplete}%</span>
-            </div>
-            <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-3">
-              <MotionDiv
-                className="bg-gradient-to-r from-blue-500 to-green-500 h-3 rounded-full"
-                initial={{ width: 0 }}
-                animate={{ width: `${percentageComplete}%` }}
-                transition={{ duration: 1, ease: "easeOut" }}
-              />
-            </div>
-          </div>
-          <div className="grid grid-cols-2 gap-4 pt-2">
-            <div className="text-center">
-              <div className="text-2xl font-bold text-gray-900 dark:text-white">{stats.completedLots}/{stats.totalLots}</div>
-              <div className="text-sm text-gray-600 dark:text-gray-400">Lots Complete</div>
-            </div>
-            <div className="text-center">
-              <div className="text-2xl font-bold text-gray-900 dark:text-white">{stats.studentsPresent}</div>
-              <div className="text-sm text-gray-600 dark:text-gray-400">Students Present</div>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* Instructions */}
-      <div className="bg-blue-50 dark:bg-blue-900/30 border border-blue-200 dark:border-blue-700 rounded-lg p-6">
-        <h3 className="font-semibold text-blue-800 dark:text-blue-300 mb-2">Instructions</h3>
-        <ul className="space-y-2 text-sm text-blue-700 dark:text-blue-300">
-          <li>• Make sure you've checked in with a director</li>
-          <li>• Report to your assigned lot and find your team</li>
-          <li>• Follow your lot supervisor's instructions</li>
-          <li>• Work safely and efficiently with your team</li>
-          <li>• Check out with a director when your lot is complete</li>
-        </ul>
-      </div>
-    </div>
-  );
-};
-
 export default Dashboard;
-export { AdminDashboard, VolunteerDashboard, StudentDashboard };
+export { AdminDashboard, VolunteerDashboard };
 

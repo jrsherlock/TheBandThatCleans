@@ -1,65 +1,77 @@
 /**
  * TBTC Lot Edit Modal Component
  * Modal for editing lot details (extracted from Director Dashboard)
+ * MVP: Enhanced with OCR-based image upload functionality
  */
 
-import React, { useState, useEffect, useRef } from 'react';
-import { X, Save, Camera, Image } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { X, Save, Upload, Image } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { toast } from 'react-hot-toast';
+import ImageUploadModal from './ImageUploadModal.jsx';
 
 const MotionDiv = motion.div;
 
 /**
  * LotEditModal - Modal for editing lot details
+ * MVP: Integrated with ImageUploadModal for OCR processing
  */
-const LotEditModal = ({ lot, onClose, onSave, onPhotoUpload }) => {
+const LotEditModal = ({ lot, onClose, onSave }) => {
   const [comment, setComment] = useState("");
   const [studentCount, setStudentCount] = useState(0);
-  const fileInputRef = useRef(null);
+  const [showImageUpload, setShowImageUpload] = useState(false);
+  const [ocrProcessed, setOcrProcessed] = useState(false);
 
   useEffect(() => {
     if (lot) {
       setComment(lot.comment || "");
       setStudentCount(lot.totalStudentsSignedUp || 0);
+      setOcrProcessed(!!lot.signUpSheetPhoto);
     }
   }, [lot]);
 
   const handleSave = () => {
     if (lot) {
-      onSave(lot.id, { 
-        comment: comment.trim() || undefined, 
-        totalStudentsSignedUp: studentCount 
+      onSave(lot.id, {
+        comment: comment.trim() || undefined,
+        totalStudentsSignedUp: studentCount
       });
       toast.success(`${lot.name} details saved.`);
       onClose();
     }
   };
 
-  const handlePhotoAttach = (event) => {
-    const file = event.target.files?.[0];
-    if (file) {
-      const reader = new FileReader();
-      reader.onload = (e) => {
-        if (onPhotoUpload) {
-          onPhotoUpload(lot.id, e.target.result); // Base64 string
-          toast.success("Sign-up sheet photo attached.");
-        }
-      };
-      reader.readAsDataURL(file);
+  const handleUploadComplete = (ocrResult) => {
+    // Update student count from OCR result
+    if (ocrResult.extractedCount !== undefined) {
+      setStudentCount(ocrResult.extractedCount);
+      setOcrProcessed(true);
+      toast.success(`Student count updated to ${ocrResult.extractedCount} from OCR`);
     }
+    setShowImageUpload(false);
   };
 
   if (!lot) return null;
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 dark:bg-opacity-70 flex items-center justify-center p-4 z-50">
-      <MotionDiv
-        initial={{ scale: 0.9, opacity: 0 }}
-        animate={{ scale: 1, opacity: 1 }}
-        exit={{ scale: 0.9, opacity: 0 }}
-        className="bg-white dark:bg-gray-800 rounded-lg p-6 w-full max-w-md transition-colors duration-200"
-      >
+    <>
+      {/* Image Upload Modal */}
+      <ImageUploadModal
+        isOpen={showImageUpload}
+        onClose={() => setShowImageUpload(false)}
+        lotId={lot.id}
+        lotName={lot.name}
+        onUploadComplete={handleUploadComplete}
+      />
+
+      {/* Main Edit Modal */}
+      <div className="fixed inset-0 bg-black bg-opacity-50 dark:bg-opacity-70 flex items-center justify-center p-4 z-50">
+        <MotionDiv
+          initial={{ scale: 0.9, opacity: 0 }}
+          animate={{ scale: 1, opacity: 1 }}
+          exit={{ scale: 0.9, opacity: 0 }}
+          className="bg-white dark:bg-gray-800 rounded-lg p-6 w-full max-w-md transition-colors duration-200"
+        >
         <div className="flex justify-between items-center mb-4">
           <h3 className="text-lg font-bold text-gray-900 dark:text-white">Edit {lot.name}</h3>
           <button 
@@ -100,33 +112,27 @@ const LotEditModal = ({ lot, onClose, onSave, onPhotoUpload }) => {
             />
           </div>
 
-          {/* Photo Upload */}
+          {/* Photo Upload - MVP: OCR Processing */}
           <div>
             <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-              Sign-up Sheet Photo
+              Sign-In Sheet Photo (OCR Processing)
             </label>
-            <input
-              type="file"
-              accept="image/*"
-              capture="environment"
-              className="hidden"
-              onChange={handlePhotoAttach}
-              ref={fileInputRef}
-              id="lot-photo-input"
-            />
-            <button 
-              onClick={() => fileInputRef.current?.click()} 
+            <button
+              onClick={() => setShowImageUpload(true)}
               className="w-full flex items-center justify-center gap-2 px-4 py-2 bg-green-100 dark:bg-green-900/40 text-green-700 dark:text-green-300 rounded-lg hover:bg-green-200 dark:hover:bg-green-900/60 transition-colors"
             >
-              <Camera size={16} />
-              <span>Upload Photo</span>
+              <Upload size={16} />
+              <span>Upload & Process Photo</span>
             </button>
-            {lot.signUpSheetPhoto && (
+            {ocrProcessed && (
               <div className="flex items-center gap-2 text-sm text-green-600 dark:text-green-400 mt-2">
                 <Image size={14} />
-                <span>Photo attached</span>
+                <span>Photo processed with OCR</span>
               </div>
             )}
+            <p className="text-xs text-gray-500 dark:text-gray-400 mt-2">
+              Upload a photo of the physical sign-in sheet. The system will automatically count students.
+            </p>
           </div>
 
           {/* Action Buttons */}
@@ -148,6 +154,7 @@ const LotEditModal = ({ lot, onClose, onSave, onPhotoUpload }) => {
         </div>
       </MotionDiv>
     </div>
+    </>
   );
 };
 

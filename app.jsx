@@ -14,7 +14,6 @@ import apiService, { ApiError } from './api-service.js';
 import Dashboard from './src/components/Dashboard.jsx';
 import ParkingLotsScreen from './src/components/ParkingLotsScreen.jsx';
 import StudentsScreen from './src/components/StudentsScreen.jsx';
-import QRCodeRouter from './src/components/QRCodeRouter.jsx';
 import CheckOutToggle from './src/components/CheckOutToggle.jsx';
 import { hasPermission } from './src/utils/permissions.js';
 import { getDefaultTab } from './src/utils/roleHelpers.jsx';
@@ -166,12 +165,11 @@ initialLots.forEach(lot => {
 });
 
 
-// Mock Users for Select Dropdown
+// Mock Users for Select Dropdown (MVP: Students no longer use the app)
 const mockUsers = [
   { id: "user-1", name: "Director Smith", role: "admin", email: "director.smith@school.edu" },
   { id: "user-2", name: "Director Johnson", role: "admin", email: "director.johnson@school.edu" },
-  { id: "user-3", name: "Parent Volunteer", role: "volunteer", email: "volunteer@parent.com" },
-  { id: "student-1", name: "Emma Johnson", role: "student", email: "emma.j@student.edu" }
+  { id: "user-3", name: "Parent Volunteer", role: "volunteer", email: "volunteer@parent.com" }
 ];
 
 // --- UTILITY AND STYLES ---
@@ -231,24 +229,6 @@ const App = () => {
 
   // API operation states
   const [operationLoading, setOperationLoading] = useState(false);
-
-  // QR Code routing state
-  const [isQRCodeRoute, setIsQRCodeRoute] = useState(false);
-
-  // Check for QR code route on mount
-  useEffect(() => {
-    const checkQRRoute = () => {
-      const hash = window.location.hash;
-      setIsQRCodeRoute(hash.startsWith('#checkin') || hash.startsWith('#checkout'));
-    };
-
-    checkQRRoute();
-    window.addEventListener('hashchange', checkQRRoute);
-
-    return () => {
-      window.removeEventListener('hashchange', checkQRRoute);
-    };
-  }, []);
 
   // Load initial data from API
   useEffect(() => {
@@ -573,50 +553,7 @@ const App = () => {
     }
   };
 
-  // Handler for QR code check-in completion
-  const handleCheckInComplete = (studentId, lotId) => {
-    // Reload data to reflect changes
-    setStudents(prevStudents =>
-      prevStudents.map(student =>
-        student.id === studentId
-          ? { ...student, checkedIn: true, checkInTime: new Date(), assignedLot: lotId }
-          : student
-      )
-    );
 
-    setLots(prevLots =>
-      prevLots.map(lot =>
-        lot.id === lotId
-          ? { ...lot, assignedStudents: [...(lot.assignedStudents || []), studentId] }
-          : lot
-      )
-    );
-  };
-
-  // Handler for QR code check-out completion
-  const handleCheckOutComplete = (studentId) => {
-    const student = students.find(s => s.id === studentId);
-    if (!student) return;
-
-    // Reload data to reflect changes
-    setStudents(prevStudents =>
-      prevStudents.map(s =>
-        s.id === studentId
-          ? { ...s, checkedIn: false, assignedLot: null }
-          : s
-      )
-    );
-
-    if (student.assignedLot) {
-      setLots(prevLots =>
-        prevLots.map(lot =>
-          lot.id === student.assignedLot
-            ? { ...lot, assignedStudents: (lot.assignedStudents || []).filter(id => id !== studentId) }
-            : lot
-        )
-      );
-    }
-  };
 
 
   // Handler for notification/messaging (mock)
@@ -779,23 +716,6 @@ const App = () => {
   // Show error state if initial load failed and no fallback data
   if (error && lots.length === 0 && students.length === 0) {
     return <ErrorDisplay error={error} onRetry={() => window.location.reload()} />;
-  }
-
-  // If QR code route is active, show QR code router instead of main app
-  if (isQRCodeRoute) {
-    return (
-      <>
-        <Toaster position="top-right" />
-        <QRCodeRouter
-          students={students}
-          lots={lots}
-          checkOutEnabled={checkOutEnabled}
-          onCheckInComplete={handleCheckInComplete}
-          onCheckOutComplete={handleCheckOutComplete}
-          onNavigateHome={() => setIsQRCodeRoute(false)}
-        />
-      </>
-    );
   }
 
   return (
