@@ -16,7 +16,7 @@ const SHEETS = {
   LOTS: {
     name: "Lots",
     headers: [
-      "id", "name", "section", "status", "priority", "estimatedTime",
+      "id", "name", "status", "zone", "priority",
       "totalStudentsSignedUp", "comment", "lastUpdated", "updatedBy",
       "actualStartTime", "completedTime", "signUpSheetPhoto"
     ]
@@ -230,8 +230,13 @@ function handleUpdateLotStatus(payload) {
     const currentTime = new Date().toISOString();
     let lotFound = false;
 
+    // Convert payload lotId to string for comparison (handles both string and number IDs)
+    const lotIdToUpdate = String(payload.lotId);
+
     for (let i = 1; i < data.length; i++) {
-      if (data[i][lotIndex] === payload.lotId) {
+      const sheetLotId = String(data[i][lotIndex]); // Convert sheet ID to string for comparison
+
+      if (sheetLotId === lotIdToUpdate) {
         lotFound = true;
 
         // Update basic fields
@@ -279,7 +284,12 @@ function handleUpdateLotStatus(payload) {
  */
 function handleUpdateBulkStatus(payload) {
   try {
+    // ENHANCED DEBUG: Log the entire payload first
+    logInfo("handleUpdateBulkStatus", `=== BULK UPDATE REQUEST START ===`);
+    logInfo("handleUpdateBulkStatus", `Full payload: ${JSON.stringify(payload)}`);
+
     if (!payload.lotIds || !Array.isArray(payload.lotIds) || payload.lotIds.length === 0) {
+      logError("handleUpdateBulkStatus", `Invalid lotIds: ${JSON.stringify(payload.lotIds)}`);
       return createJsonResponse({ error: "lotIds array is required and must not be empty" }, 400);
     }
 
@@ -302,8 +312,37 @@ function handleUpdateBulkStatus(payload) {
     const currentTime = new Date().toISOString();
     const updatedLots = [];
 
+    // ENHANCED DEBUG: Log types of received IDs
+    logInfo("handleUpdateBulkStatus", `Received lotIds count: ${payload.lotIds.length}`);
+    logInfo("handleUpdateBulkStatus", `Received lotIds: ${JSON.stringify(payload.lotIds)}`);
+    logInfo("handleUpdateBulkStatus", `Received lotIds types: ${payload.lotIds.map(id => typeof id).join(', ')}`);
+
+    // Convert payload lotIds to strings for comparison (handles both string and number IDs)
+    const lotIdsToUpdate = payload.lotIds.map(id => String(id));
+
+    logInfo("handleUpdateBulkStatus", `Converted lotIds: ${JSON.stringify(lotIdsToUpdate)}`);
+
+    // ENHANCED DEBUG: Log all sheet lot IDs BEFORE the loop
+    const allSheetLotIds = [];
+    const allSheetLotIdTypes = [];
     for (let i = 1; i < data.length; i++) {
-      if (payload.lotIds.includes(data[i][lotIndex])) {
+      allSheetLotIds.push(data[i][lotIndex]);
+      allSheetLotIdTypes.push(typeof data[i][lotIndex]);
+    }
+    logInfo("handleUpdateBulkStatus", `Sheet lot IDs (raw): ${JSON.stringify(allSheetLotIds)}`);
+    logInfo("handleUpdateBulkStatus", `Sheet lot ID types: ${allSheetLotIdTypes.join(', ')}`);
+
+    for (let i = 1; i < data.length; i++) {
+      const sheetLotId = String(data[i][lotIndex]); // Convert sheet ID to string for comparison
+      const originalSheetLotId = data[i][lotIndex];
+
+      // ENHANCED DEBUG: Log first few comparisons
+      if (i <= 3) {
+        logInfo("handleUpdateBulkStatus", `Row ${i}: Comparing sheet ID "${sheetLotId}" (type: ${typeof originalSheetLotId}) against ${JSON.stringify(lotIdsToUpdate)}`);
+      }
+
+      if (lotIdsToUpdate.includes(sheetLotId)) {
+        logInfo("handleUpdateBulkStatus", `MATCH FOUND: Row ${i}, ID: ${sheetLotId}`);
         updatedLots.push(data[i][lotIndex]);
 
         // Update basic fields
@@ -321,6 +360,14 @@ function handleUpdateBulkStatus(payload) {
           data[i][completedTimeIndex] = currentTime;
         }
       }
+    }
+
+    // Debug logging
+    logInfo("handleUpdateBulkStatus", `Found ${updatedLots.length} lots to update`);
+    if (updatedLots.length === 0) {
+      logInfo("handleUpdateBulkStatus", `NO MATCHES FOUND!`);
+      logInfo("handleUpdateBulkStatus", `Looking for: ${JSON.stringify(lotIdsToUpdate)}`);
+      logInfo("handleUpdateBulkStatus", `Available in sheet: ${JSON.stringify(allSheetLotIds.map(id => String(id)))}`);
     }
 
     sheet.getRange(1, 1, data.length, data[0].length).setValues(data);
@@ -363,8 +410,13 @@ function handleUpdateLotDetails(payload) {
     let lotFound = false;
     const currentTime = new Date().toISOString();
 
+    // Convert payload lotId to string for comparison (handles both string and number IDs)
+    const lotIdToUpdate = String(payload.lotId);
+
     for (let i = 1; i < data.length; i++) {
-      if (data[i][idIndex] === payload.lotId) {
+      const sheetLotId = String(data[i][idIndex]); // Convert sheet ID to string for comparison
+
+      if (sheetLotId === lotIdToUpdate) {
         lotFound = true;
 
         // Update fields if provided
@@ -439,8 +491,13 @@ function handleUpdateStudentStatus(payload) {
     let studentFound = false;
     let studentName = "";
 
+    // Convert payload studentId to string for comparison (handles both string and number IDs)
+    const studentIdToUpdate = String(studentId);
+
     for (let i = 1; i < data.length; i++) {
-      if (data[i][idIndex] === studentId) {
+      const sheetStudentId = String(data[i][idIndex]); // Convert sheet ID to string for comparison
+
+      if (sheetStudentId === studentIdToUpdate) {
         studentFound = true;
         studentName = data[i][headers.indexOf("name")] || "Unknown Student";
 
@@ -726,7 +783,7 @@ function handleGetReport() {
     const attendanceData = readSheetData(SHEETS.ATTENDANCE_LOG);
 
     // Generate CSV report data
-    let csvData = "Lot ID,Lot Name,Status,Students Signed Up,Students Present,Completion Time,Duration (min)\n";
+    let csvData = "Lot ID,Lot Name,Status,Students Signed Up,Students Present,Duration (min)\n";
 
     lotsData.forEach(lot => {
       const studentsPresent = studentsData.filter(s => s.assignedLot === lot.id && s.checkedIn).length;
@@ -738,7 +795,7 @@ function handleGetReport() {
         duration = Math.round((end - start) / (1000 * 60)); // minutes
       }
 
-      csvData += `"${lot.id}","${lot.name}","${lot.status}",${lot.totalStudentsSignedUp || 0},${studentsPresent},"${lot.completedTime || 'N/A'}",${duration}\n`;
+      csvData += `"${lot.id}","${lot.name}","${lot.status}",${lot.totalStudentsSignedUp || 0},${studentsPresent},${duration}\n`;
     });
 
     // Add attendance summary

@@ -5,7 +5,7 @@
 
 import React, { useState, useMemo } from 'react';
 import {
-  CheckCircle, Clock, Users, MapPin, AlertTriangle, Download, Bell, X,
+  CheckCircle, Users, MapPin, AlertTriangle, Download, Bell, X,
   Send, RefreshCw, Music
 } from 'lucide-react';
 import { BarChart, Bar, PieChart, Pie, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell } from 'recharts';
@@ -14,6 +14,7 @@ import { motion } from 'framer-motion';
 import { toast } from 'react-hot-toast';
 import { isAdmin, isVolunteer, isStudent } from '../utils/permissions.js';
 import { ProtectedButton } from './ProtectedComponents.jsx';
+import SegmentedProgressBar from './SegmentedProgressBar.jsx';
 
 const MotionDiv = motion.div;
 
@@ -84,25 +85,37 @@ const AdminDashboard = ({ lots, students, stats, currentUser, onBulkStatusUpdate
 
   // Computed data for charts
   const lotDistributionData = useMemo(() => {
+    // Map Tailwind color classes to actual hex values
+    const colorMap = {
+      'bg-gray-500': '#6B7280',
+      'bg-blue-500': '#3B82F6',
+      'bg-red-500': '#EF4444',
+      'bg-yellow-500': '#EAB308',
+      'bg-green-500': '#10B981',
+    };
+
     return statuses.map(s => {
       const { label, color } = getStatusStyles(s);
       return {
         name: label,
         value: lots.filter(l => l.status === s).length,
-        color: color.replace('bg-', '#').replace('-500', '500')
+        color: colorMap[color] || '#6B7280'
       };
     });
   }, [lots, statuses, getStatusStyles]);
 
   const sectionProgressData = useMemo(() => {
-    return sections.map(sec => ({
-      section: sec.charAt(0).toUpperCase() + sec.slice(1),
-      total: lots.filter(l => l.section === sec).length,
-      completed: lots.filter(l => l.section === sec && l.status === 'complete').length,
-    }));
+    return sections.map(sec => {
+      // Use zone field from Google Sheet, fallback to section for backward compatibility
+      const lotsInZone = lots.filter(l => (l.zone || l.section) === sec);
+      return {
+        section: sec.charAt(0).toUpperCase() + sec.slice(1),
+        total: lotsInZone.length,
+        completed: lotsInZone.filter(l => l.status === 'complete').length,
+      };
+    });
   }, [lots, sections]);
 
-  const percentageComplete = stats.totalLots > 0 ? Math.round(stats.completedLots / stats.totalLots * 100) : 0;
   const lotsNeedingHelp = lots ? lots.filter(l => l.status === 'needs-help') : [];
   const pendingApprovalLots = lots.filter(l => l.status === 'pending-approval');
   const studentsCheckedIn = students.filter(s => s.checkedIn);
@@ -183,51 +196,44 @@ const AdminDashboard = ({ lots, students, stats, currentUser, onBulkStatusUpdate
           </div>
         </div>
         <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-4 flex items-center gap-3 transition-colors duration-200">
-          <div className="bg-green-100 dark:bg-green-900/40 p-2 rounded-lg"><Users className="text-green-600 dark:text-green-400" size={20} /></div>
+          <div className="bg-green-100 dark:bg-green-900/40 p-2 rounded-lg"><CheckCircle className="text-green-600 dark:text-green-400" size={20} /></div>
           <div>
             <div className="text-2xl font-bold text-gray-900 dark:text-white">{stats.studentsPresent}</div>
-            <div className="text-sm text-gray-600 dark:text-gray-400">Students Present</div>
+            <div className="text-sm text-gray-600 dark:text-gray-400">Checked In Today</div>
           </div>
         </div>
         <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-4 flex items-center gap-3 transition-colors duration-200">
-          <div className="bg-purple-100 dark:bg-purple-900/40 p-2 rounded-lg"><CheckCircle className="text-purple-600 dark:text-purple-400" size={20} /></div>
+          <div className="bg-purple-100 dark:bg-purple-900/40 p-2 rounded-lg"><Users className="text-purple-600 dark:text-purple-400" size={20} /></div>
+          <div>
+            <div className="text-lg font-bold text-gray-900 dark:text-white">
+              {stats.studentsPresent} / {stats.totalStudents}
+            </div>
+            <div className="text-sm text-gray-600 dark:text-gray-400">
+              Participation ({stats.totalStudents > 0 ? Math.round((stats.studentsPresent / stats.totalStudents) * 100) : 0}%)
+            </div>
+          </div>
+        </div>
+        <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-4 flex items-center gap-3 transition-colors duration-200">
+          <div className="bg-orange-100 dark:bg-orange-900/40 p-2 rounded-lg"><Users className="text-orange-600 dark:text-orange-400" size={20} /></div>
           <div>
             <div className="text-2xl font-bold text-gray-900 dark:text-white">{stats.totalStudentsSignedUp}</div>
-            <div className="text-sm text-gray-600 dark:text-gray-400">Signed Up</div>
-          </div>
-        </div>
-        <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-4 flex items-center gap-3 transition-colors duration-200">
-          <div className="bg-orange-100 dark:bg-orange-900/40 p-2 rounded-lg"><Clock className="text-orange-600 dark:text-orange-400" size={20} /></div>
-          <div>
-            <div className="text-lg font-bold text-gray-900 dark:text-white">{stats.estimatedCompletion.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</div>
-            <div className="text-sm text-gray-600 dark:text-gray-400">Est. Completion</div>
+            <div className="text-sm text-gray-600 dark:text-gray-400">Total Signed Up</div>
           </div>
         </div>
       </div>
 
-      {/* Progress Bar */}
-      <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6 transition-colors duration-200">
-        <div className="flex justify-between items-center mb-4">
-          <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Overall Progress</h3>
-          <span className="text-2xl font-bold text-blue-600 dark:text-blue-400">{percentageComplete}%</span>
-        </div>
-        <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-4">
-          <MotionDiv
-            className="bg-gradient-to-r from-blue-500 to-green-500 h-4 rounded-full flex items-center justify-end pr-2"
-            initial={{ width: 0 }}
-            animate={{ width: `${percentageComplete}%` }}
-            transition={{ duration: 1.5, ease: "easeOut" }}
-          >
-            {percentageComplete > 10 && <span className="text-white text-xs font-medium">{percentageComplete}%</span>}
-          </MotionDiv>
-        </div>
-      </div>
+      {/* Segmented Progress Bar */}
+      <SegmentedProgressBar
+        lots={lots}
+        getStatusStyles={getStatusStyles}
+        stats={stats}
+      />
 
       {/* Charts and Command Center */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Status Distribution Chart */}
         <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6 transition-colors duration-200">
-          <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">Status Distribution</h3>
+          <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">Lot Status Distribution</h3>
           <ResponsiveContainer width="100%" height={250}>
             <PieChart>
               <Pie
@@ -238,7 +244,6 @@ const AdminDashboard = ({ lots, students, stats, currentUser, onBulkStatusUpdate
                 dataKey="value"
                 label={({ name, value }) => value > 0 ? `${name}: ${value}` : ''}
                 labelLine={{ stroke: isDarkMode ? '#D1D5DB' : '#374151' }}
-                style={{ fill: isDarkMode ? '#F3F4F6' : '#1F2937' }}
               >
                 {lotDistributionData.map((entry, index) => (
                   <Cell key={`cell-${index}`} fill={entry.color} />
@@ -258,9 +263,9 @@ const AdminDashboard = ({ lots, students, stats, currentUser, onBulkStatusUpdate
           </ResponsiveContainer>
         </div>
 
-        {/* Section Progress Chart */}
+        {/* Zone Progress Chart */}
         <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6 transition-colors duration-200">
-          <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">Progress by Section</h3>
+          <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">Progress by Zone</h3>
           <ResponsiveContainer width="100%" height={250}>
             <BarChart data={sectionProgressData} margin={{ top: 5, right: 30, left: 20, bottom: 5 }}>
               <CartesianGrid strokeDasharray="3 3" stroke={isDarkMode ? '#374151' : '#E5E7EB'} />
@@ -295,7 +300,16 @@ const AdminDashboard = ({ lots, students, stats, currentUser, onBulkStatusUpdate
               <select
                 multiple
                 value={selectedLots}
-                onChange={e => setSelectedLots(Array.from(e.target.selectedOptions, m => m.value))}
+                onChange={e => {
+                  // Convert string values back to numbers to match lot.id type
+                  const selectedValues = Array.from(e.target.selectedOptions, m => {
+                    const value = m.value;
+                    // Try to parse as number, otherwise keep as string
+                    const numValue = Number(value);
+                    return !isNaN(numValue) ? numValue : value;
+                  });
+                  setSelectedLots(selectedValues);
+                }}
                 className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 rounded-lg focus:ring-2 focus:ring-blue-500 dark:focus:ring-blue-400 focus:border-transparent h-32"
               >
                 {lots.map(l => (
@@ -372,11 +386,11 @@ const AdminDashboard = ({ lots, students, stats, currentUser, onBulkStatusUpdate
 };
 
 /**
- * Volunteer Dashboard - Simplified read-only view
+ * Volunteer Dashboard - Simplified read-only view with interactive KPI cards
  * Merges VolunteerView functionality
  */
 const VolunteerDashboard = ({ lots, students, stats, getStatusStyles, statuses, useTheme, StatusBadge }) => {
-  const { isDarkMode } = useTheme();
+  const [selectedStatus, setSelectedStatus] = useState(null);
 
   const lotStatusCounts = useMemo(() => {
     return lots.reduce((acc, l) => {
@@ -385,7 +399,16 @@ const VolunteerDashboard = ({ lots, students, stats, getStatusStyles, statuses, 
     }, {});
   }, [lots]);
 
-  const percentageComplete = stats.totalLots > 0 ? Math.round(stats.completedLots / stats.totalLots * 100) : 0;
+  // Filter lots by selected status
+  const filteredLots = useMemo(() => {
+    if (!selectedStatus) return [];
+    return lots.filter(l => l.status === selectedStatus);
+  }, [lots, selectedStatus]);
+
+  // Handle status card click
+  const handleStatusCardClick = (status) => {
+    setSelectedStatus(selectedStatus === status ? null : status);
+  };
 
   return (
     <div className="space-y-6">
@@ -393,38 +416,89 @@ const VolunteerDashboard = ({ lots, students, stats, getStatusStyles, statuses, 
       <div className="bg-white dark:bg-gray-800 rounded-lg shadow-lg p-6 transition-colors duration-200">
         <h1 className="text-3xl font-bold text-gray-900 dark:text-white mb-2">The Band That Cleans</h1>
         <p className="text-gray-600 dark:text-gray-400">Live Event Progress • Parent Volunteer View</p>
-        <div className="mt-4">
-          <div className="flex justify-between items-center mb-2">
-            <span className="text-sm font-medium text-gray-700 dark:text-gray-300">Overall Progress</span>
-            <span className="text-sm font-bold text-blue-600 dark:text-blue-400">{percentageComplete}%</span>
-          </div>
-          <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-3">
-            <MotionDiv
-              className="bg-gradient-to-r from-blue-500 to-green-500 h-3 rounded-full"
-              initial={{ width: 0 }}
-              animate={{ width: `${percentageComplete}%` }}
-              transition={{ duration: 1, ease: "easeOut" }}
-            />
-          </div>
-        </div>
       </div>
 
-      {/* Status Counts */}
+      {/* Segmented Progress Bar */}
+      <SegmentedProgressBar
+        lots={lots}
+        getStatusStyles={getStatusStyles}
+        stats={stats}
+      />
+
+      {/* Interactive Status Counts */}
       <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
         {statuses.map(s => {
           const { label, color } = getStatusStyles(s);
           const count = lotStatusCounts[s] || 0;
+          const isSelected = selectedStatus === s;
           return (
-            <div key={s} className="bg-white dark:bg-gray-800 rounded-lg shadow p-4 text-center transition-colors duration-200">
+            <button
+              key={s}
+              onClick={() => handleStatusCardClick(s)}
+              className={`bg-white dark:bg-gray-800 rounded-lg shadow p-4 text-center transition-all duration-200 hover:shadow-lg hover:scale-105 ${
+                isSelected ? 'ring-2 ring-blue-500 dark:ring-blue-400' : ''
+              }`}
+            >
               <div className={`text-2xl font-bold ${color.replace('bg-', 'text-')}`}>{count}</div>
               <div className="text-sm text-gray-600 dark:text-gray-400">{label}</div>
-            </div>
+              {isSelected && (
+                <div className="text-xs text-blue-600 dark:text-blue-400 mt-1">Click to hide</div>
+              )}
+            </button>
           );
         })}
       </div>
 
+      {/* Filtered Lots Display */}
+      {selectedStatus && (
+        <MotionDiv
+          initial={{ opacity: 0, height: 0 }}
+          animate={{ opacity: 1, height: "auto" }}
+          exit={{ opacity: 0, height: 0 }}
+          transition={{ duration: 0.3 }}
+          className="bg-white dark:bg-gray-800 rounded-lg shadow-lg p-6 transition-colors duration-200"
+        >
+          <h3 className="text-xl font-bold text-gray-900 dark:text-white mb-4">
+            {getStatusStyles(selectedStatus).label} Lots ({filteredLots.length})
+          </h3>
+          {filteredLots.length > 0 ? (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {filteredLots.map(lot => (
+                <div
+                  key={lot.id}
+                  className="bg-gray-50 dark:bg-gray-700 rounded-lg p-4 border-l-4 transition-colors duration-200"
+                  style={{ borderColor: getStatusStyles(lot.status).color.replace('bg-', '#').replace('-500', '500') }}
+                >
+                  <div className="flex items-start justify-between mb-2">
+                    <h4 className="font-bold text-gray-900 dark:text-white">{lot.name}</h4>
+                    <StatusBadge status={lot.status} />
+                  </div>
+                  <div className="space-y-1 text-sm text-gray-600 dark:text-gray-400">
+                    <div className="flex items-center gap-1">
+                      <MapPin size={14} />
+                      <span className="capitalize">Zone {lot.zone || lot.section}</span>
+                    </div>
+                    <div className="flex items-center gap-1">
+                      <Users size={14} />
+                      <span>{lot.totalStudentsSignedUp || 0} students signed up</span>
+                    </div>
+                    {lot.comment && (
+                      <div className="mt-2 p-2 bg-blue-50 dark:bg-blue-900/30 rounded text-xs text-blue-700 dark:text-blue-300">
+                        {lot.comment}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p className="text-gray-500 dark:text-gray-400 text-center py-4">No lots with this status</p>
+          )}
+        </MotionDiv>
+      )}
+
       {/* KPI Row */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         <div className="bg-white dark:bg-gray-800 rounded-lg shadow-lg p-6 flex items-center gap-3 transition-colors duration-200">
           <div className="bg-blue-100 dark:bg-blue-900/40 p-3 rounded-lg"><Users className="text-blue-600 dark:text-blue-400" size={24} /></div>
           <div>
@@ -437,13 +511,6 @@ const VolunteerDashboard = ({ lots, students, stats, getStatusStyles, statuses, 
           <div>
             <div className="text-2xl font-bold text-gray-900 dark:text-white">{stats.studentsPresent}</div>
             <div className="text-sm text-gray-600 dark:text-gray-400">Students Present Today</div>
-          </div>
-        </div>
-        <div className="bg-white dark:bg-gray-800 rounded-lg shadow-lg p-6 flex items-center gap-3 transition-colors duration-200">
-          <div className="bg-purple-100 dark:bg-purple-900/40 p-3 rounded-lg"><Clock className="text-purple-600 dark:text-purple-400" size={24} /></div>
-          <div>
-            <div className="text-2xl font-bold text-gray-900 dark:text-white">{stats.estimatedCompletion.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</div>
-            <div className="text-sm text-gray-600 dark:text-gray-400">Estimated Completion</div>
           </div>
         </div>
       </div>
@@ -468,8 +535,6 @@ const StudentDashboard = ({ lots, students, stats, currentUser, getStatusStyles,
   const currentStudent = students.find(s => s.id === currentUser.id);
   const assignedLot = currentStudent?.assignedLot ? lots.find(l => l.id === currentStudent.assignedLot) : null;
   const teammates = assignedLot ? students.filter(s => s.assignedLot === assignedLot.id && s.id !== currentUser.id) : [];
-
-  const percentageComplete = stats.totalLots > 0 ? Math.round(stats.completedLots / stats.totalLots * 100) : 0;
 
   return (
     <div className="space-y-6">
@@ -513,7 +578,7 @@ const StudentDashboard = ({ lots, students, stats, currentUser, getStatusStyles,
               </div>
               {assignedLot && (
                 <div className="text-xs text-gray-500 dark:text-gray-400 capitalize">
-                  {assignedLot.section} Section
+                  {assignedLot.zone || assignedLot.section}
                 </div>
               )}
             </div>
@@ -573,32 +638,22 @@ const StudentDashboard = ({ lots, students, stats, currentUser, getStatusStyles,
       )}
 
       {/* Event Progress */}
+      <SegmentedProgressBar
+        lots={lots}
+        getStatusStyles={getStatusStyles}
+        stats={stats}
+      />
+
+      {/* Quick Stats */}
       <div className="bg-white dark:bg-gray-800 rounded-lg shadow-lg p-6 transition-colors duration-200">
-        <h2 className="text-xl font-bold text-gray-900 dark:text-white mb-4">Event Progress</h2>
-        <div className="space-y-4">
-          <div>
-            <div className="flex justify-between items-center mb-2">
-              <span className="text-sm font-medium text-gray-700 dark:text-gray-300">Overall Completion</span>
-              <span className="text-sm font-bold text-blue-600 dark:text-blue-400">{percentageComplete}%</span>
-            </div>
-            <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-3">
-              <MotionDiv
-                className="bg-gradient-to-r from-blue-500 to-green-500 h-3 rounded-full"
-                initial={{ width: 0 }}
-                animate={{ width: `${percentageComplete}%` }}
-                transition={{ duration: 1, ease: "easeOut" }}
-              />
-            </div>
+        <div className="grid grid-cols-2 gap-4">
+          <div className="text-center">
+            <div className="text-2xl font-bold text-gray-900 dark:text-white">{stats.completedLots}/{stats.totalLots}</div>
+            <div className="text-sm text-gray-600 dark:text-gray-400">Lots Complete</div>
           </div>
-          <div className="grid grid-cols-2 gap-4 pt-2">
-            <div className="text-center">
-              <div className="text-2xl font-bold text-gray-900 dark:text-white">{stats.completedLots}/{stats.totalLots}</div>
-              <div className="text-sm text-gray-600 dark:text-gray-400">Lots Complete</div>
-            </div>
-            <div className="text-center">
-              <div className="text-2xl font-bold text-gray-900 dark:text-white">{stats.studentsPresent}</div>
-              <div className="text-sm text-gray-600 dark:text-gray-400">Students Present</div>
-            </div>
+          <div className="text-center">
+            <div className="text-2xl font-bold text-gray-900 dark:text-white">{stats.studentsPresent}</div>
+            <div className="text-sm text-gray-600 dark:text-gray-400">Students Present</div>
           </div>
         </div>
       </div>

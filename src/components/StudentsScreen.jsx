@@ -111,8 +111,8 @@ const StudentsScreen = ({ students, currentUser, onStudentUpdate }) => {
       const statusMatch = statusFilter === "all" ||
         (statusFilter === "checked-in" && s.checkedIn) ||
         (statusFilter === "not-checked-in" && !s.checkedIn) ||
-        (statusFilter === "assigned" && s.assignedLot) ||
-        (statusFilter === "unassigned" && !s.assignedLot);
+        (statusFilter === "checked-out" && s.checkOutTime) ||
+        (statusFilter === "still-cleaning" && s.checkedIn && !s.checkOutTime);
       const yearMatch = yearFilter === "all" || s.year === yearFilter;
 
       return nameMatch && sectionMatch && statusMatch && yearMatch;
@@ -122,11 +122,11 @@ const StudentsScreen = ({ students, currentUser, onStudentUpdate }) => {
   // Statistics
   const stats = useMemo(() => {
     const checkedIn = students.filter(s => s.checkedIn).length;
-    const assigned = students.filter(s => s.assignedLot).length;
+    const stillCleaning = students.filter(s => s.checkedIn && !s.checkOutTime).length;
     return {
       total: students.length,
       checkedIn,
-      assigned,
+      stillCleaning,
       percentage: students.length > 0 ? Math.round(checkedIn / students.length * 100) : 0
     };
   }, [students]);
@@ -179,18 +179,18 @@ const StudentsScreen = ({ students, currentUser, onStudentUpdate }) => {
       <div className="grid grid-cols-3 gap-4 mb-6 flex-shrink-0">
         <div className="bg-blue-50 dark:bg-blue-900/30 p-4 rounded-lg text-center">
           <Users className="mx-auto mb-2 text-blue-600 dark:text-blue-400" size={24} />
-          <div className="text-2xl font-bold text-blue-600 dark:text-blue-400">{stats.checkedIn}</div>
-          <div className="text-sm text-blue-800 dark:text-blue-300">Checked In</div>
+          <div className="text-2xl font-bold text-blue-600 dark:text-blue-400">{stats.total}</div>
+          <div className="text-sm text-blue-800 dark:text-blue-300">Total Students</div>
         </div>
         <div className="bg-green-50 dark:bg-green-900/30 p-4 rounded-lg text-center">
           <CheckCircle className="mx-auto mb-2 text-green-600 dark:text-green-400" size={24} />
-          <div className="text-2xl font-bold text-green-600 dark:text-green-400">{stats.assigned}</div>
-          <div className="text-sm text-green-800 dark:text-green-300">Assigned</div>
+          <div className="text-2xl font-bold text-green-600 dark:text-green-400">{stats.checkedIn}</div>
+          <div className="text-sm text-green-800 dark:text-green-300">Checked In</div>
         </div>
         <div className="bg-purple-50 dark:bg-purple-900/30 p-4 rounded-lg text-center">
-          <Filter className="mx-auto mb-2 text-purple-600 dark:text-purple-400" size={24} />
-          <div className="text-2xl font-bold text-purple-600 dark:text-purple-400">{filteredStudents.length}</div>
-          <div className="text-sm text-purple-800 dark:text-purple-300">Filtered</div>
+          <Clock className="mx-auto mb-2 text-purple-600 dark:text-purple-400" size={24} />
+          <div className="text-2xl font-bold text-purple-600 dark:text-purple-400">{stats.stillCleaning}</div>
+          <div className="text-sm text-purple-800 dark:text-purple-300">Still Cleaning</div>
         </div>
       </div>
 
@@ -217,16 +217,16 @@ const StudentsScreen = ({ students, currentUser, onStudentUpdate }) => {
             {sections.map(s => <option key={s} value={s}>{s}</option>)}
           </select>
           
-          <select 
-            value={statusFilter} 
-            onChange={e => setStatusFilter(e.target.value)} 
+          <select
+            value={statusFilter}
+            onChange={e => setStatusFilter(e.target.value)}
             className="px-3 py-2 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 rounded-lg focus:ring-2 focus:ring-blue-500 dark:focus:ring-blue-400 focus:border-transparent"
           >
             <option value="all">All Status</option>
             <option value="checked-in">Checked In</option>
             <option value="not-checked-in">Not Checked In</option>
-            <option value="assigned">Assigned</option>
-            <option value="unassigned">Unassigned</option>
+            <option value="still-cleaning">Still Cleaning</option>
+            <option value="checked-out">Checked Out</option>
           </select>
           
           <select 

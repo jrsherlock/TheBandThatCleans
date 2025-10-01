@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect, useRef, createContext, useContext } from 'react';
+import React, { useState, useMemo, useEffect, useRef, useCallback, createContext, useContext } from 'react';
 import {
   CheckCircle, Clock, Users, MapPin, AlertTriangle, Download, Bell, X,
   Save, MessageSquare, Image, RefreshCw, Filter, PenLine, Play, Settings,
@@ -16,8 +16,17 @@ import ParkingLotsScreen from './src/components/ParkingLotsScreen.jsx';
 import StudentsScreen from './src/components/StudentsScreen.jsx';
 import QRCodeRouter from './src/components/QRCodeRouter.jsx';
 import CheckOutToggle from './src/components/CheckOutToggle.jsx';
+import RefreshButton from './src/components/RefreshButton.jsx';
+import SyncStatusIndicator from './src/components/SyncStatusIndicator.jsx';
 import { hasPermission } from './src/utils/permissions.js';
 import { getDefaultTab } from './src/utils/roleHelpers.jsx';
+import { usePolling } from './src/hooks/usePolling.js';
+
+// --- POLLING CONFIGURATION ---
+const POLLING_INTERVAL_MS = 30000; // 30 seconds
+const POLLING_TIMEOUT_MS = 10000; // 10 seconds
+const MAX_RETRY_ATTEMPTS = 3;
+const RETRY_BACKOFF_MS = 5000; // 5 seconds initial backoff
 
 const MotionDiv = motion.div;
 
@@ -101,7 +110,9 @@ const lotNames = [
   "Lot 90", "Lot 95", "Lot 100", "Lot 110", "Lot 120", "Lot 130",
   "Lot 140", "Lot 150", "Lot F", "Lot H"
 ];
-const sections = ["north", "south", "east", "west"];
+// NOTE: sections array is now dynamically generated from Google Sheet zone data (see useMemo hook in App component)
+// Fallback sections for mock data only (real data comes from Google Sheet)
+const mockSections = ["Zone 1", "Zone 2", "Zone 3", "Zone 4", "Zone 5"];
 const priorities = ["high", "medium", "low"];
 const statuses = ["not-started", "in-progress", "needs-help", "pending-approval", "complete"];
 const studentInstruments = ["Flute", "Piccolo", "Clarinet", "Saxophone", "Trumpet", "Trombone", "Tuba", "Percussion", "Color Guard"];
@@ -111,12 +122,12 @@ const studentYears = ["freshman", "sophomore", "junior", "senior"];
 const initialLots = lotNames.map((name, index) => {
   const lotId = `lot-${index + 1}`;
   const status = statuses[Math.floor(Math.random() * statuses.length)];
-  const estimatedTime = Math.floor(Math.random() * 60) + 30; // 30-90 minutes
   let actualStartTime, completedTime;
 
   if (status === 'complete') {
-    actualStartTime = new Date(Date.now() - estimatedTime * 60 * 1000 - Math.random() * 3600000); // Check-in time
-    completedTime = new Date(actualStartTime.getTime() + estimatedTime * 60 * 1000);
+    const duration = Math.floor(Math.random() * 60) + 30; // 30-90 minutes
+    actualStartTime = new Date(Date.now() - duration * 60 * 1000 - Math.random() * 3600000); // Check-in time
+    completedTime = new Date(actualStartTime.getTime() + duration * 60 * 1000);
   }
 
   return {
@@ -125,9 +136,8 @@ const initialLots = lotNames.map((name, index) => {
     status: status,
     priority: priorities[Math.floor(Math.random() * priorities.length)],
     assignedStudents: [],
-    estimatedTime: estimatedTime,
     capacity: Math.floor(Math.random() * 100) + 50,
-    section: sections[Math.floor(Math.random() * sections.length)],
+    zone: mockSections[Math.floor(Math.random() * mockSections.length)], // Zone field from Google Sheet
     notes: Math.random() > 0.7 ? "Special attention needed for heavy debris" : undefined,
     totalStudentsSignedUp: Math.floor(Math.random() * 15) + 5,
     lastUpdated: new Date(Date.now() - Math.random() * 3600000),
@@ -260,12 +270,25 @@ const App = () => {
         // Load main data
         const data = await apiService.fetchInitialData();
 
+        console.log('🔍 API Data Debug: Received data from API', {
+          lotsCount: data.lots?.length || 0,
+          studentsCount: data.students?.length || 0,
+          firstLot: data.lots?.[0],
+          sampleLotFields: data.lots?.[0] ? Object.keys(data.lots[0]) : []
+        });
+
         if (data.lots) {
           // Initialize assignedStudents property for each lot
           const lotsWithAssignedStudents = data.lots.map(lot => ({
             ...lot,
             assignedStudents: lot.assignedStudents || []
           }));
+
+          console.log('🔍 API Data Debug: Setting lots state', {
+            count: lotsWithAssignedStudents.length,
+            firstLotWithZone: lotsWithAssignedStudents[0]
+          });
+
           setLots(lotsWithAssignedStudents);
         }
 
@@ -319,6 +342,177 @@ const App = () => {
     loadInitialData();
   }, []);
 
+  // --- REAL-TIME POLLING INTEGRATION ---
+
+  // Ref to track previous data for comparison
+  const previousDataRef = useRef({ lots: [], students: [] });
+
+  // Polling fetch function
+  const fetchPollingData = useCallback(async () => {
+    return await apiService.fetchInitialData();
+  }, []);
+
+  // Determine if data has changed (to prevent unnecessary re-renders)
+  const shouldUpdateData = useCallback((newData) => {
+    if (!newData || !newData.lots || !newData.students) {
+      console.log('[Polling] shouldUpdateData: Invalid data received');
+      return false;
+    }
+
+    const prevLots = previousDataRef.current.lots;
+    const prevStudents = previousDataRef.current.students;
+
+    // If this is the first poll (no previous data), always update
+    if (prevLots.length === 0 && prevStudents.length === 0) {
+      console.log('[Polling] shouldUpdateData: First poll, updating state');
+      return true;
+    }
+
+    // Compare array lengths first (quick check)
+    if (newData.lots.length !== prevLots.length ||
+        newData.students.length !== prevStudents.length) {
+      console.log('[Polling] shouldUpdateData: Array length changed', {
+        lotsChanged: newData.lots.length !== prevLots.length,
+        studentsChanged: newData.students.length !== prevStudents.length
+      });
+      return true;
+    }
+
+    // Compare lot IDs and lastUpdated timestamps
+    const lotsChanged = newData.lots.some((lot, index) => {
+      const prevLot = prevLots[index];
+      if (!prevLot) return true;
+
+      return lot.id !== prevLot.id ||
+             lot.status !== prevLot.status ||
+             lot.lastUpdated !== prevLot.lastUpdated ||
+             lot.totalStudentsSignedUp !== prevLot.totalStudentsSignedUp;
+    });
+
+    // Compare student IDs and check-in status
+    const studentsChanged = newData.students.some((student, index) => {
+      const prevStudent = prevStudents[index];
+      if (!prevStudent) return true;
+
+      return student.id !== prevStudent.id ||
+             student.checkedIn !== prevStudent.checkedIn ||
+             student.assignedLot !== prevStudent.assignedLot;
+    });
+
+    const hasChanges = lotsChanged || studentsChanged;
+    console.log('[Polling] shouldUpdateData: Changes detected?', hasChanges);
+
+    return hasChanges;
+  }, []);
+
+  // Handle successful polling update
+  const handlePollingSuccess = useCallback((data, isManual) => {
+    console.log('[Polling] handlePollingSuccess called', {
+      isManual,
+      lotsCount: data?.lots?.length,
+      studentsCount: data?.students?.length
+    });
+
+    if (!data || !data.lots || !data.students) {
+      console.log('[Polling] handlePollingSuccess: Invalid data, skipping update');
+      return;
+    }
+
+    // Process lots data
+    const lotsWithAssignedStudents = data.lots.map(lot => ({
+      ...lot,
+      assignedStudents: data.students
+        .filter(student => student.assignedLot === lot.id)
+        .map(student => student.id)
+    }));
+
+    console.log('[Polling] Updating state with new data');
+
+    // Update state
+    setLots(lotsWithAssignedStudents);
+    setStudents(data.students);
+
+    // Store for next comparison
+    previousDataRef.current = {
+      lots: lotsWithAssignedStudents,
+      students: data.students
+    };
+
+    // Show notification for manual refresh or if changes detected
+    if (isManual) {
+      console.log('[Polling] Manual refresh - showing success toast');
+      toast.success('Data refreshed successfully!', {
+        duration: 2000,
+        position: 'bottom-right'
+      });
+    } else {
+      // For automatic polling, only show toast if there were actual changes
+      // Note: We already updated state, this is just for notification
+      console.log('[Polling] Automatic poll - checking if notification needed');
+    }
+  }, []);
+
+  // Handle polling errors
+  const handlePollingError = useCallback((error, isManual) => {
+    console.error('[Polling] Error:', error);
+
+    // Only show error toast for manual refresh
+    if (isManual) {
+      toast.error('Failed to refresh. Please try again.', {
+        duration: 4000,
+        position: 'bottom-right'
+      });
+    }
+  }, []);
+
+  // Initialize polling hook
+  const {
+    lastUpdated,
+    isRefreshing,
+    pollingStatus,
+    pollingError,
+    refresh: manualRefresh
+  } = usePolling(fetchPollingData, {
+    interval: POLLING_INTERVAL_MS,
+    timeout: POLLING_TIMEOUT_MS,
+    maxRetries: MAX_RETRY_ATTEMPTS,
+    retryBackoff: RETRY_BACKOFF_MS,
+    enabled: !isInitialLoad && !isQRCodeRoute, // Don't poll during initial load or on QR routes
+    onSuccess: handlePollingSuccess,
+    onError: handlePollingError,
+    shouldUpdate: shouldUpdateData
+  });
+
+  // Dynamic sections array from Google Sheet zone data
+  const sections = useMemo(() => {
+    if (!lots || lots.length === 0) {
+      console.log('🔍 Sections Debug: No lots data available');
+      return [];
+    }
+
+    console.log('🔍 Sections Debug: Processing lots data', {
+      totalLots: lots.length,
+      firstLot: lots[0],
+      sampleZones: lots.slice(0, 5).map(l => ({ id: l.id, zone: l.zone }))
+    });
+
+    // Extract unique zone values from lots data
+    const uniqueZones = [...new Set(lots.map(lot => lot.zone).filter(Boolean))];
+
+    console.log('🔍 Sections Debug: Extracted unique zones', uniqueZones);
+
+    // Sort zones naturally (Zone 1, Zone 2, etc.)
+    const sorted = uniqueZones.sort((a, b) => {
+      // Extract numbers from zone names for natural sorting
+      const numA = parseInt(a.match(/\d+/)?.[0] || '0');
+      const numB = parseInt(b.match(/\d+/)?.[0] || '0');
+      return numA - numB;
+    });
+
+    console.log('🔍 Sections Debug: Final sorted sections', sorted);
+    return sorted;
+  }, [lots]);
+
   const stats = useMemo(() => {
     // Return default stats if lots array is empty or undefined
     if (!lots || lots.length === 0) {
@@ -327,38 +521,27 @@ const App = () => {
         completedLots: 0,
         inProgressLots: 0,
         notStartedLots: 0,
-        totalStudents: 0,
-        checkedInStudents: 0,
-        averageCompletionTime: 0
+        totalStudents: 246, // Total roster size (hardcoded for now)
+        checkedInStudents: 0
       };
     }
     const totalLots = lots.length;
     const completedLots = lots.filter(l => l.status === 'complete').length;
-    const studentsPresent = students.filter(s => s.checkedIn).length;
-    const totalStudents = students.length;
-    const totalStudentsSignedUp = lots.reduce((acc, l) => acc + l.totalStudentsSignedUp, 0);
 
-    const completedDurations = lots
-      .filter(l => l.status === 'complete' && l.actualStartTime && l.completedTime)
-      .map(l => (l.completedTime.getTime() - l.actualStartTime.getTime()) / (60 * 1000)); // duration in minutes
+    // Sum of all students signed up across all lots (from Google Sheet sign-up data)
+    const totalStudentsSignedUp = lots.reduce((acc, l) => acc + (l.totalStudentsSignedUp || 0), 0);
 
-    const averageCompletionTime = completedDurations.length > 0
-      ? completedDurations.reduce((a, b) => a + b, 0) / completedDurations.length
-      : 45; // Default average time
-
-    const remainingLots = lots.filter(l => l.status !== 'complete').length;
-    const estimatedCompletionTime = new Date(Date.now() + remainingLots * averageCompletionTime * 60 * 1000);
+    // Total roster size (hardcoded to 246 for now)
+    const totalRosterSize = 246;
 
     return {
       totalLots,
       completedLots,
-      studentsPresent,
-      totalStudents,
-      averageCompletionTime: averageCompletionTime,
-      estimatedCompletion: estimatedCompletionTime,
+      studentsPresent: totalStudentsSignedUp, // Show sum of lot sign-ups
+      totalStudents: totalRosterSize, // Total roster size
       totalStudentsSignedUp,
     };
-  }, [lots, students]);
+  }, [lots]);
 
   // Handler for single lot status update
   const handleLotStatusUpdate = async (lotId, status) => {
@@ -378,7 +561,7 @@ const App = () => {
               updatedLot.actualStartTime = new Date();
             } else if (status === 'complete') {
               if (!l.actualStartTime) {
-                updatedLot.actualStartTime = new Date(Date.now() - (l.estimatedTime || 45) * 60 * 1000);
+                updatedLot.actualStartTime = new Date(Date.now() - 45 * 60 * 1000); // Default 45 minutes
               }
               updatedLot.completedTime = new Date();
             }
@@ -445,7 +628,15 @@ const App = () => {
   const handleBulkStatusUpdate = async (lotIds, status) => {
     if (!lotIds || lotIds.length === 0) return;
 
+    // DEBUG: Log what we're sending
+    console.log('🔍 handleBulkStatusUpdate called with:');
+    console.log('  lotIds:', lotIds);
+    console.log('  lotIds types:', lotIds.map(id => typeof id));
+    console.log('  status:', status);
+    console.log('  All lot IDs in state:', lots.map(l => ({ id: l.id, type: typeof l.id, name: l.name })));
+
     const originalLots = lots.filter(l => lotIds.includes(l.id));
+    console.log('  Matched lots:', originalLots.map(l => l.name));
 
     try {
       setOperationLoading(true);
@@ -460,7 +651,7 @@ const App = () => {
               updatedLot.actualStartTime = new Date();
             } else if (status === 'complete') {
               if (!lot.actualStartTime) {
-                updatedLot.actualStartTime = new Date(Date.now() - (lot.estimatedTime || 45) * 60 * 1000);
+                updatedLot.actualStartTime = new Date(Date.now() - 45 * 60 * 1000); // Default 45 minutes
               }
               updatedLot.completedTime = new Date();
             }
@@ -471,7 +662,9 @@ const App = () => {
       );
 
       // API call
-      await apiService.updateBulkLotStatus(lotIds, status, currentUser.name);
+      console.log('  Calling API with lotIds:', lotIds);
+      const response = await apiService.updateBulkLotStatus(lotIds, status, currentUser.name);
+      console.log('  API response:', response);
 
       toast.success(`Updated ${lotIds.length} lots to ${getStatusStyles(status).label}`);
 
@@ -833,9 +1026,19 @@ const App = () => {
                 <div className="text-sm text-gray-600 dark:text-gray-400">Lots Complete</div>
               </div>
               <div className="text-right hidden md:block">
-                <div className="text-2xl font-bold text-green-600 dark:text-green-400">{stats.studentsPresent}/{stats.totalStudentsSignedUp}</div>
-                <div className="text-sm text-gray-600 dark:text-gray-400">Students Present</div>
+                <div className="text-2xl font-bold text-green-600 dark:text-green-400">
+                  {stats.studentsPresent}/{stats.totalStudents}
+                </div>
+                <div className="text-sm text-gray-600 dark:text-gray-400">
+                  Students Present ({stats.totalStudents > 0 ? Math.round((stats.studentsPresent / stats.totalStudents) * 100) : 0}%)
+                </div>
               </div>
+              <RefreshButton
+                onRefresh={manualRefresh}
+                isRefreshing={isRefreshing}
+                lastUpdated={lastUpdated}
+                disabled={isLoading}
+              />
               <DarkModeToggle />
               <div className="border-l border-gray-300 dark:border-gray-600 pl-3 md:pl-6">
                 <select
@@ -896,9 +1099,23 @@ const App = () => {
       {/* Footer */}
       <footer className="bg-gray-50 dark:bg-gray-800 border-t border-gray-200 dark:border-gray-700 mt-12 transition-colors duration-200">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
-          <div className="flex justify-between items-center text-sm text-gray-600 dark:text-gray-400">
-            <p>Last updated: {new Date().toLocaleTimeString()} • Logged in as: {currentUser.name}</p>
-            <p>Go Hawks! ({stats.estimatedCompletion.toLocaleTimeString()})</p>
+          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 text-sm text-gray-600 dark:text-gray-400">
+            <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2 sm:gap-4">
+              <p>Logged in as: {currentUser.name}</p>
+              {!isQRCodeRoute && (
+                <>
+                  <span className="hidden sm:inline text-gray-400 dark:text-gray-600">•</span>
+                  <SyncStatusIndicator
+                    pollingStatus={pollingStatus}
+                    lastUpdated={lastUpdated}
+                    pollingInterval={POLLING_INTERVAL_MS}
+                    pollingError={pollingError}
+                    onRetry={manualRefresh}
+                  />
+                </>
+              )}
+            </div>
+            <p>Go Hawks!</p>
           </div>
         </div>
       </footer>
