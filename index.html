@@ -2,7 +2,7 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🎵</text></svg>" />
+    <link rel="icon" type="image/png" href="/src/public/TBTC.png" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>The Band That Cleans - TBTC Platform</title>
     <meta name="description" content="Zero-cost web platform for managing City High Band's parking lot cleanup operations" />
@@ -123,16 +123,23 @@
   <body>
     <div id="root">
       <!-- Fallback loading screen -->
-      <div class="min-h-screen bg-gradient-to-br from-blue-50 via-white to-purple-50 flex items-center justify-center">
+      <div class="min-h-screen bg-gradient-to-br from-blue-50 via-white to-purple-50 flex items-center justify-center p-4">
         <div class="text-center">
+          <!-- TBTC Logo -->
+          <img
+            src="/src/public/TBTC.png"
+            alt="The Band That Cleans Logo"
+            class="h-32 w-32 sm:h-40 sm:w-40 md:h-48 md:w-48 object-contain mx-auto mb-6"
+            style="animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;"
+          />
           <div class="loading-dots mb-4">
             <div></div>
             <div></div>
             <div></div>
             <div></div>
           </div>
-          <h1 class="text-2xl font-bold text-gray-900 mb-2">The Band That Cleans</h1>
-          <p class="text-gray-600">Loading platform...</p>
+          <h1 class="text-xl sm:text-2xl font-bold text-gray-900 mb-2">The Band That Cleans</h1>
+          <p class="text-sm sm:text-base text-gray-600">Loading platform...</p>
         </div>
       </div>
     </div>

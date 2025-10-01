@@ -2,13 +2,16 @@ import React, { useState, useMemo, useEffect, useRef, useCallback, createContext
 import {
   CheckCircle, Clock, Users, MapPin, AlertTriangle, Download, Bell, X,
   Save, MessageSquare, Image, RefreshCw, Filter, PenLine, Play, Settings,
-  Calendar, Music, Eye, Search, Send, Camera, Loader2, Sun, Moon
+  Calendar, Eye, Search, Send, Camera, Loader2, Sun, Moon
 } from 'lucide-react';
 import { BarChart, Bar, PieChart, Pie, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell } from 'recharts';
 import { format } from 'date-fns';
 import { motion } from 'framer-motion';
 import { toast, Toaster } from 'react-hot-toast';
 import apiService, { ApiError } from './api-service.js';
+
+// Import TBTC Logo
+import TBTCLogo from './src/public/TBTC.png';
 
 // Import new consolidated components
 import Dashboard from './src/components/Dashboard.jsx';
@@ -141,7 +144,7 @@ const initialLots = lotNames.map((name, index) => {
     notes: Math.random() > 0.7 ? "Special attention needed for heavy debris" : undefined,
     totalStudentsSignedUp: Math.floor(Math.random() * 15) + 5,
     lastUpdated: new Date(Date.now() - Math.random() * 3600000),
-    updatedBy: Math.random() > 0.5 ? "Director Smith" : "Director Johnson",
+    updatedBy: Math.random() > 0.5 ? "Aaron Ottmar - Director" : "Mike Kowbel - Director",
     actualStartTime,
     completedTime,
     comment: Math.random() > 0.8 ? "Very messy lot this game, sending extra team." : undefined,
@@ -178,10 +181,10 @@ initialLots.forEach(lot => {
 
 // Mock Users for Select Dropdown
 const mockUsers = [
-  { id: "user-1", name: "Director Smith", role: "admin", email: "director.smith@school.edu" },
-  { id: "user-2", name: "Director Johnson", role: "admin", email: "director.johnson@school.edu" },
+  { id: "user-1", name: "Aaron Ottmar - Director", role: "admin", email: "aaron.ottmar@school.edu" },
+  { id: "user-2", name: "Mike Kowbel - Director", role: "admin", email: "mike.kowbel@school.edu" },
   { id: "user-3", name: "Parent Volunteer", role: "volunteer", email: "volunteer@parent.com" },
-  { id: "student-1", name: "Emma Johnson", role: "student", email: "emma.j@student.edu" }
+  { id: "student-1", name: "Jameson Sherlock - Student", role: "student", email: "jameson.sherlock@student.edu" }
 ];
 
 // --- UTILITY AND STYLES ---
@@ -941,6 +944,12 @@ const App = () => {
   const LoadingSpinner = () => (
     <div className="flex items-center justify-center min-h-screen bg-gradient-to-br from-blue-50 via-white to-purple-50 dark:from-gray-900 dark:via-gray-800 dark:to-gray-900">
       <div className="text-center">
+        {/* TBTC Logo */}
+        <img
+          src={TBTCLogo}
+          alt="The Band That Cleans Logo"
+          className="h-32 w-32 sm:h-40 sm:w-40 md:h-48 md:w-48 object-contain mx-auto mb-6 animate-pulse"
+        />
         <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 dark:border-blue-400 mx-auto mb-4"></div>
         <p className="text-gray-600 dark:text-gray-300">Loading TBTC platform...</p>
       </div>
@@ -951,6 +960,12 @@ const App = () => {
   const ErrorDisplay = ({ error, onRetry }) => (
     <div className="flex items-center justify-center min-h-screen bg-gradient-to-br from-blue-50 via-white to-purple-50 dark:from-gray-900 dark:via-gray-800 dark:to-gray-900">
       <div className="text-center max-w-md mx-auto p-6">
+        {/* TBTC Logo */}
+        <img
+          src={TBTCLogo}
+          alt="The Band That Cleans Logo"
+          className="h-28 w-28 sm:h-32 sm:w-32 md:h-40 md:w-40 object-contain mx-auto mb-4"
+        />
         <AlertTriangle className="h-12 w-12 text-red-500 dark:text-red-400 mx-auto mb-4" />
         <h2 className="text-xl font-semibold text-gray-900 dark:text-white mb-2">Failed to Load</h2>
         <p className="text-gray-600 dark:text-gray-300 mb-4">{error}</p>
@@ -1005,53 +1020,105 @@ const App = () => {
         </div>
       )}
 
-      {/* Header Bar */}
+      {/* Header Bar - Redesigned for Mobile-First Responsive Layout */}
       <header className="bg-white dark:bg-gray-800 shadow-lg border-b border-gray-200 dark:border-gray-700 transition-colors duration-200">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between items-center py-6">
-            <div className="flex items-center gap-4">
-              <div className="bg-gradient-to-r from-blue-600 to-purple-600 p-3 rounded-xl">
-                <Music className="text-white" size={32} />
+          {/* Mobile: Two-row layout | Desktop: Single-row layout */}
+          <div className="py-4 md:py-6">
+
+            {/* Row 1: Branding (Logo + Title) */}
+            <div className="flex items-center justify-between gap-3 mb-3 md:mb-0">
+              {/* Left: Logo + Title */}
+              <div className="flex items-center gap-3 md:gap-4 min-w-0 flex-1">
+                {/* TBTC Logo */}
+                <div className="flex-shrink-0">
+                  <img
+                    src={TBTCLogo}
+                    alt="The Band That Cleans Logo"
+                    className="h-20 w-20 sm:h-24 sm:w-24 md:h-32 md:w-32 object-contain rounded-lg"
+                  />
+                </div>
+                {/* Title and Subtitle */}
+                <div className="min-w-0 flex-1">
+                  <h1 className="text-xl sm:text-2xl md:text-3xl font-bold text-gray-900 dark:text-white truncate">
+                    The Band That Cleans
+                  </h1>
+                  <p className="text-xs sm:text-sm md:text-base text-gray-600 dark:text-gray-300 truncate">
+                    {currentUser.role === 'admin' ? "Director Dashboard" : currentUser.role === 'volunteer' ? "Volunteer View" : "Student View"} • Parking Lot Cleanup
+                  </p>
+                </div>
               </div>
-              <div>
-                <h1 className="text-3xl font-bold text-gray-900 dark:text-white">The Band That Cleans</h1>
-                <p className="text-gray-600 dark:text-gray-300">
-                  {currentUser.role === 'admin' ? "Director Dashboard" : currentUser.role === 'volunteer' ? "Volunteer View" : "Student View"} • Parking Lot Cleanup Event
-                </p>
+
+              {/* Right: Stats (Desktop Only) */}
+              <div className="hidden lg:flex items-center gap-6 flex-shrink-0">
+                {/* Lots Complete Stat */}
+                <div className="text-right">
+                  <div className="text-2xl font-bold text-blue-600 dark:text-blue-400">
+                    {stats.completedLots}/{stats.totalLots}
+                  </div>
+                  <div className="text-sm text-gray-600 dark:text-gray-400">Lots Complete</div>
+                </div>
+                {/* Students Present Stat */}
+                <div className="text-right">
+                  <div className="text-2xl font-bold text-green-600 dark:text-green-400">
+                    {stats.studentsPresent}/{stats.totalStudents}
+                  </div>
+                  <div className="text-sm text-gray-600 dark:text-gray-400">
+                    Students Present ({stats.totalStudents > 0 ? Math.round((stats.studentsPresent / stats.totalStudents) * 100) : 0}%)
+                  </div>
+                </div>
               </div>
             </div>
-            <div className="flex items-center gap-3 md:gap-6">
-              <div className="text-right hidden md:block">
-                <div className="text-2xl font-bold text-blue-600 dark:text-blue-400">{stats.completedLots}/{stats.totalLots}</div>
-                <div className="text-sm text-gray-600 dark:text-gray-400">Lots Complete</div>
-              </div>
-              <div className="text-right hidden md:block">
-                <div className="text-2xl font-bold text-green-600 dark:text-green-400">
-                  {stats.studentsPresent}/{stats.totalStudents}
+
+            {/* Row 2: Controls (Mobile: Full width | Desktop: Right-aligned) */}
+            <div className="flex items-center justify-between md:justify-end gap-2 sm:gap-3 md:gap-4">
+              {/* Stats (Tablet Only - Compact Version) */}
+              <div className="hidden md:flex lg:hidden items-center gap-3 text-sm">
+                <div className="text-center">
+                  <div className="font-bold text-blue-600 dark:text-blue-400">
+                    {stats.completedLots}/{stats.totalLots}
+                  </div>
+                  <div className="text-xs text-gray-600 dark:text-gray-400">Lots</div>
                 </div>
-                <div className="text-sm text-gray-600 dark:text-gray-400">
-                  Students Present ({stats.totalStudents > 0 ? Math.round((stats.studentsPresent / stats.totalStudents) * 100) : 0}%)
+                <div className="text-center">
+                  <div className="font-bold text-green-600 dark:text-green-400">
+                    {stats.studentsPresent}/{stats.totalStudents}
+                  </div>
+                  <div className="text-xs text-gray-600 dark:text-gray-400">Students</div>
                 </div>
               </div>
-              <RefreshButton
-                onRefresh={manualRefresh}
-                isRefreshing={isRefreshing}
-                lastUpdated={lastUpdated}
-                disabled={isLoading}
-              />
-              <DarkModeToggle />
-              <div className="border-l border-gray-300 dark:border-gray-600 pl-3 md:pl-6">
-                <select
-                  value={currentUser.id}
-                  onChange={e => setCurrentUser(mockUsers.find(u => u.id === e.target.value))}
-                  className="px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 dark:focus:ring-blue-400 focus:border-transparent"
-                >
-                  {mockUsers.map(u => (
-                    <option key={u.id} value={u.id}>
-                      {u.name} ({u.role})
-                    </option>
-                  ))}
-                </select>
+
+              {/* Control Buttons Group */}
+              <div className="flex items-center gap-2 sm:gap-3">
+                {/* Refresh Button */}
+                <RefreshButton
+                  onRefresh={manualRefresh}
+                  isRefreshing={isRefreshing}
+                  lastUpdated={lastUpdated}
+                  disabled={isLoading}
+                />
+
+                {/* Dark Mode Toggle */}
+                <DarkModeToggle />
+
+                {/* Divider */}
+                <div className="h-8 w-px bg-gray-300 dark:bg-gray-600 hidden sm:block"></div>
+
+                {/* User Dropdown */}
+                <div className="flex-shrink-0">
+                  <select
+                    value={currentUser.id}
+                    onChange={e => setCurrentUser(mockUsers.find(u => u.id === e.target.value))}
+                    className="px-2 py-2 sm:px-3 text-sm sm:text-base border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 dark:focus:ring-blue-400 focus:border-transparent min-h-[44px] cursor-pointer"
+                    aria-label="Select user role"
+                  >
+                    {mockUsers.map(u => (
+                      <option key={u.id} value={u.id}>
+                        {u.name} ({u.role})
+                      </option>
+                    ))}
+                  </select>
+                </div>
               </div>
             </div>
           </div>

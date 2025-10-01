@@ -10,6 +10,9 @@ import { format } from 'date-fns';
 import { toast } from 'react-hot-toast';
 import apiService from '../../api-service.js';
 
+// Import TBTC Logo
+import TBTCLogo from '../public/TBTC.png';
+
 const StudentCheckIn = ({ lotId, students, lots, onCheckInComplete }) => {
   const [studentIdentifier, setStudentIdentifier] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -126,12 +129,20 @@ const StudentCheckIn = ({ lotId, students, lots, onCheckInComplete }) => {
     <div className="max-w-2xl mx-auto p-6">
       {/* Header */}
       <div className="bg-gradient-to-r from-blue-600 to-purple-600 text-white rounded-t-xl p-6">
-        <div className="flex items-center gap-3 mb-2">
-          <MapPin size={32} />
-          <h1 className="text-2xl font-bold">Student Check-In</h1>
+        <div className="flex items-center justify-between mb-2">
+          <div className="flex items-center gap-3">
+            <MapPin className="flex-shrink-0" size={32} />
+            <h1 className="text-xl sm:text-2xl font-bold">Student Check-In</h1>
+          </div>
+          {/* TBTC Logo */}
+          <img
+            src={TBTCLogo}
+            alt="TBTC Logo"
+            className="h-16 w-16 sm:h-20 sm:w-20 md:h-24 md:w-24 object-contain flex-shrink-0"
+          />
         </div>
         {lot && (
-          <p className="text-blue-100 text-lg">
+          <p className="text-blue-100 text-base sm:text-lg">
             {lot.name}
           </p>
         )}

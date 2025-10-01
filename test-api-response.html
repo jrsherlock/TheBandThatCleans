@@ -1,0 +1,297 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TBTC API Response Tester</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            max-width: 1200px;
+            margin: 40px auto;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        .container {
+            background: white;
+            padding: 30px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #333;
+            border-bottom: 3px solid #4CAF50;
+            padding-bottom: 10px;
+        }
+        .input-group {
+            margin: 20px 0;
+        }
+        label {
+            display: block;
+            font-weight: bold;
+            margin-bottom: 8px;
+            color: #555;
+        }
+        input {
+            width: 100%;
+            padding: 12px;
+            border: 2px solid #ddd;
+            border-radius: 4px;
+            font-size: 14px;
+            box-sizing: border-box;
+        }
+        button {
+            background: #4CAF50;
+            color: white;
+            padding: 12px 30px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 16px;
+            font-weight: bold;
+            margin-top: 10px;
+        }
+        button:hover {
+            background: #45a049;
+        }
+        button:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+        }
+        .results {
+            margin-top: 30px;
+        }
+        .section {
+            background: #f9f9f9;
+            padding: 20px;
+            border-radius: 4px;
+            margin: 15px 0;
+            border-left: 4px solid #4CAF50;
+        }
+        .section h3 {
+            margin-top: 0;
+            color: #333;
+        }
+        pre {
+            background: #2d2d2d;
+            color: #f8f8f2;
+            padding: 15px;
+            border-radius: 4px;
+            overflow-x: auto;
+            font-size: 13px;
+            line-height: 1.5;
+        }
+        .error {
+            background: #ffebee;
+            border-left-color: #f44336;
+            color: #c62828;
+        }
+        .success {
+            background: #e8f5e9;
+            border-left-color: #4CAF50;
+            color: #2e7d32;
+        }
+        .warning {
+            background: #fff3e0;
+            border-left-color: #ff9800;
+            color: #e65100;
+        }
+        .badge {
+            display: inline-block;
+            padding: 4px 8px;
+            border-radius: 3px;
+            font-size: 12px;
+            font-weight: bold;
+            margin-left: 10px;
+        }
+        .badge-success {
+            background: #4CAF50;
+            color: white;
+        }
+        .badge-error {
+            background: #f44336;
+            color: white;
+        }
+        .badge-warning {
+            background: #ff9800;
+            color: white;
+        }
+        .loading {
+            text-align: center;
+            padding: 20px;
+            color: #666;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🔍 TBTC API Response Tester</h1>
+        <p>This tool helps debug the Google Apps Script API to verify that zone data is being returned correctly.</p>
+
+        <div class="input-group">
+            <label for="apiUrl">Google Apps Script Web App URL:</label>
+            <input 
+                type="text" 
+                id="apiUrl" 
+                placeholder="https://script.google.com/macros/s/YOUR_DEPLOYMENT_ID/exec"
+                value=""
+            >
+            <small style="color: #666; display: block; margin-top: 5px;">
+                Get this from: Google Apps Script → Deploy → Manage deployments → Web app URL
+            </small>
+        </div>
+
+        <button onclick="testAPI()">Test API Response</button>
+
+        <div id="results" class="results"></div>
+    </div>
+
+    <script>
+        async function testAPI() {
+            const apiUrl = document.getElementById('apiUrl').value.trim();
+            const resultsDiv = document.getElementById('results');
+
+            if (!apiUrl) {
+                resultsDiv.innerHTML = '<div class="section error"><h3>❌ Error</h3><p>Please enter the Google Apps Script Web App URL</p></div>';
+                return;
+            }
+
+            resultsDiv.innerHTML = '<div class="loading">⏳ Loading data from API...</div>';
+
+            try {
+                const url = apiUrl + (apiUrl.includes('?') ? '&' : '?') + 'action=data';
+                const response = await fetch(url);
+                const data = await response.json();
+
+                let html = '';
+
+                // Overall Status
+                if (data.lots && data.lots.length > 0) {
+                    html += `<div class="section success">
+                        <h3>✅ API Response Successful <span class="badge badge-success">${data.lots.length} lots</span></h3>
+                        <p>Successfully received data from Google Apps Script</p>
+                    </div>`;
+                } else {
+                    html += `<div class="section error">
+                        <h3>❌ No Lots Data</h3>
+                        <p>API returned but no lots data found</p>
+                    </div>`;
+                }
+
+                // Check Zone Field
+                if (data.lots && data.lots.length > 0) {
+                    const firstLot = data.lots[0];
+                    const hasZoneField = 'zone' in firstLot;
+                    const zoneValue = firstLot.zone;
+                    const hasZoneValue = zoneValue && zoneValue !== '';
+
+                    if (hasZoneField && hasZoneValue) {
+                        html += `<div class="section success">
+                            <h3>✅ Zone Field Present <span class="badge badge-success">Has Value</span></h3>
+                            <p>First lot has zone field with value: <strong>"${zoneValue}"</strong></p>
+                        </div>`;
+                    } else if (hasZoneField && !hasZoneValue) {
+                        html += `<div class="section warning">
+                            <h3>⚠️ Zone Field Empty <span class="badge badge-warning">No Value</span></h3>
+                            <p>Zone field exists but is empty. Check Google Sheet Column D for values.</p>
+                        </div>`;
+                    } else {
+                        html += `<div class="section error">
+                            <h3>❌ Zone Field Missing <span class="badge badge-error">Not Found</span></h3>
+                            <p>Zone field not found in API response. Check Code.gs headers array.</p>
+                        </div>`;
+                    }
+
+                    // Show all fields in first lot
+                    html += `<div class="section">
+                        <h3>📋 First Lot Fields</h3>
+                        <p>Available fields in the first lot object:</p>
+                        <pre>${JSON.stringify(Object.keys(firstLot), null, 2)}</pre>
+                    </div>`;
+
+                    // Show first lot data
+                    html += `<div class="section">
+                        <h3>🔍 First Lot Data</h3>
+                        <pre>${JSON.stringify(firstLot, null, 2)}</pre>
+                    </div>`;
+
+                    // Extract unique zones
+                    const zones = [...new Set(data.lots.map(lot => lot.zone || lot.section).filter(Boolean))];
+                    if (zones.length > 0) {
+                        html += `<div class="section success">
+                            <h3>✅ Unique Zones Found <span class="badge badge-success">${zones.length} zones</span></h3>
+                            <p>These zones will appear in the dropdown:</p>
+                            <pre>${JSON.stringify(zones.sort((a, b) => {
+                                const numA = parseInt(a.match(/\\d+/)?.[0] || '0');
+                                const numB = parseInt(b.match(/\\d+/)?.[0] || '0');
+                                return numA - numB;
+                            }), null, 2)}</pre>
+                        </div>`;
+                    } else {
+                        html += `<div class="section error">
+                            <h3>❌ No Zones Found</h3>
+                            <p>Could not extract any zone values from the data. Check both 'zone' and 'section' fields.</p>
+                        </div>`;
+                    }
+
+                    // Show sample of 5 lots with zone info
+                    html += `<div class="section">
+                        <h3>📊 Sample Lots (First 5)</h3>
+                        <pre>${JSON.stringify(
+                            data.lots.slice(0, 5).map(lot => ({
+                                id: lot.id,
+                                name: lot.name,
+                                zone: lot.zone,
+                                section: lot.section,
+                                status: lot.status
+                            })),
+                            null,
+                            2
+                        )}</pre>
+                    </div>`;
+                }
+
+                // Full Response
+                html += `<div class="section">
+                    <h3>📄 Full API Response</h3>
+                    <details>
+                        <summary style="cursor: pointer; font-weight: bold; padding: 10px; background: #f0f0f0; border-radius: 4px;">
+                            Click to expand full response (${JSON.stringify(data).length} characters)
+                        </summary>
+                        <pre>${JSON.stringify(data, null, 2)}</pre>
+                    </details>
+                </div>`;
+
+                resultsDiv.innerHTML = html;
+
+            } catch (error) {
+                resultsDiv.innerHTML = `<div class="section error">
+                    <h3>❌ Error</h3>
+                    <p><strong>Error message:</strong> ${error.message}</p>
+                    <p>Make sure:</p>
+                    <ul>
+                        <li>The Web App URL is correct</li>
+                        <li>The Web App is deployed with "Anyone" access</li>
+                        <li>CORS is enabled (should be automatic for Google Apps Script)</li>
+                    </ul>
+                    <pre>${error.stack}</pre>
+                </div>`;
+            }
+        }
+
+        // Auto-fill API URL if available in localStorage
+        window.addEventListener('DOMContentLoaded', () => {
+            const savedUrl = localStorage.getItem('tbtc-api-url');
+            if (savedUrl) {
+                document.getElementById('apiUrl').value = savedUrl;
+            }
+
+            // Save URL when changed
+            document.getElementById('apiUrl').addEventListener('change', (e) => {
+                localStorage.setItem('tbtc-api-url', e.target.value);
+            });
+        });
+    </script>
+</body>
+</html>
+

@@ -199,7 +199,14 @@ const AdminDashboard = ({ lots, students, stats, currentUser, onBulkStatusUpdate
           <div className="bg-green-100 dark:bg-green-900/40 p-2 rounded-lg"><CheckCircle className="text-green-600 dark:text-green-400" size={20} /></div>
           <div>
             <div className="text-2xl font-bold text-gray-900 dark:text-white">{stats.studentsPresent}</div>
-            <div className="text-sm text-gray-600 dark:text-gray-400">Checked In Today</div>
+            <div className="text-sm text-gray-600 dark:text-gray-400">Students Checked In Today</div>
+          </div>
+        </div>
+        <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-4 flex items-center gap-3 transition-colors duration-200">
+          <div className="bg-orange-100 dark:bg-orange-900/40 p-2 rounded-lg"><Users className="text-orange-600 dark:text-orange-400" size={20} /></div>
+          <div>
+            <div className="text-2xl font-bold text-gray-900 dark:text-white">0</div>
+            <div className="text-sm text-gray-600 dark:text-gray-400">Students Signed Out Today</div>
           </div>
         </div>
         <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-4 flex items-center gap-3 transition-colors duration-200">
@@ -211,13 +218,6 @@ const AdminDashboard = ({ lots, students, stats, currentUser, onBulkStatusUpdate
             <div className="text-sm text-gray-600 dark:text-gray-400">
               Participation ({stats.totalStudents > 0 ? Math.round((stats.studentsPresent / stats.totalStudents) * 100) : 0}%)
             </div>
-          </div>
-        </div>
-        <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-4 flex items-center gap-3 transition-colors duration-200">
-          <div className="bg-orange-100 dark:bg-orange-900/40 p-2 rounded-lg"><Users className="text-orange-600 dark:text-orange-400" size={20} /></div>
-          <div>
-            <div className="text-2xl font-bold text-gray-900 dark:text-white">{stats.totalStudentsSignedUp}</div>
-            <div className="text-sm text-gray-600 dark:text-gray-400">Total Signed Up</div>
           </div>
         </div>
       </div>
@@ -418,6 +418,42 @@ const VolunteerDashboard = ({ lots, students, stats, getStatusStyles, statuses, 
         <p className="text-gray-600 dark:text-gray-400">Live Event Progress • Parent Volunteer View</p>
       </div>
 
+      {/* KPI Ribbon - Same as Director's Dashboard */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-4 flex items-center gap-3 transition-colors duration-200">
+          <div className="bg-blue-100 dark:bg-blue-900/40 p-2 rounded-lg"><MapPin className="text-blue-600 dark:text-blue-400" size={20} /></div>
+          <div>
+            <div className="text-2xl font-bold text-gray-900 dark:text-white">{stats.completedLots}/{stats.totalLots}</div>
+            <div className="text-sm text-gray-600 dark:text-gray-400">Lots Complete</div>
+          </div>
+        </div>
+        <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-4 flex items-center gap-3 transition-colors duration-200">
+          <div className="bg-green-100 dark:bg-green-900/40 p-2 rounded-lg"><CheckCircle className="text-green-600 dark:text-green-400" size={20} /></div>
+          <div>
+            <div className="text-2xl font-bold text-gray-900 dark:text-white">{stats.studentsPresent}</div>
+            <div className="text-sm text-gray-600 dark:text-gray-400">Students Checked In Today</div>
+          </div>
+        </div>
+        <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-4 flex items-center gap-3 transition-colors duration-200">
+          <div className="bg-orange-100 dark:bg-orange-900/40 p-2 rounded-lg"><Users className="text-orange-600 dark:text-orange-400" size={20} /></div>
+          <div>
+            <div className="text-2xl font-bold text-gray-900 dark:text-white">0</div>
+            <div className="text-sm text-gray-600 dark:text-gray-400">Students Signed Out Today</div>
+          </div>
+        </div>
+        <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-4 flex items-center gap-3 transition-colors duration-200">
+          <div className="bg-purple-100 dark:bg-purple-900/40 p-2 rounded-lg"><Users className="text-purple-600 dark:text-purple-400" size={20} /></div>
+          <div>
+            <div className="text-lg font-bold text-gray-900 dark:text-white">
+              {stats.studentsPresent} / {stats.totalStudents}
+            </div>
+            <div className="text-sm text-gray-600 dark:text-gray-400">
+              Participation ({stats.totalStudents > 0 ? Math.round((stats.studentsPresent / stats.totalStudents) * 100) : 0}%)
+            </div>
+          </div>
+        </div>
+      </div>
+
       {/* Segmented Progress Bar */}
       <SegmentedProgressBar
         lots={lots}
@@ -496,24 +532,6 @@ const VolunteerDashboard = ({ lots, students, stats, getStatusStyles, statuses, 
           )}
         </MotionDiv>
       )}
-
-      {/* KPI Row */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        <div className="bg-white dark:bg-gray-800 rounded-lg shadow-lg p-6 flex items-center gap-3 transition-colors duration-200">
-          <div className="bg-blue-100 dark:bg-blue-900/40 p-3 rounded-lg"><Users className="text-blue-600 dark:text-blue-400" size={24} /></div>
-          <div>
-            <div className="text-2xl font-bold text-gray-900 dark:text-white">{stats.totalStudentsSignedUp}</div>
-            <div className="text-sm text-gray-600 dark:text-gray-400">Total Students Participating</div>
-          </div>
-        </div>
-        <div className="bg-white dark:bg-gray-800 rounded-lg shadow-lg p-6 flex items-center gap-3 transition-colors duration-200">
-          <div className="bg-green-100 dark:bg-green-900/40 p-3 rounded-lg"><CheckCircle className="text-green-600 dark:text-green-400" size={24} /></div>
-          <div>
-            <div className="text-2xl font-bold text-gray-900 dark:text-white">{stats.studentsPresent}</div>
-            <div className="text-sm text-gray-600 dark:text-gray-400">Students Present Today</div>
-          </div>
-        </div>
-      </div>
 
       {/* Live Status Indicator */}
       <div className="text-center">

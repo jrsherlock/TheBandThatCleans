@@ -10,6 +10,9 @@ import { format } from 'date-fns';
 import { toast } from 'react-hot-toast';
 import apiService from '../../api-service.js';
 
+// Import TBTC Logo
+import TBTCLogo from '../public/TBTC.png';
+
 const StudentCheckOut = ({ students, lots, checkOutEnabled, onCheckOutComplete }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -85,11 +88,19 @@ const StudentCheckOut = ({ students, lots, checkOutEnabled, onCheckOutComplete }
     <div className="max-w-4xl mx-auto p-6">
       {/* Header */}
       <div className="bg-gradient-to-r from-purple-600 to-pink-600 text-white rounded-t-xl p-6">
-        <div className="flex items-center gap-3 mb-2">
-          <LogOut size={32} />
-          <h1 className="text-2xl font-bold">Student Check-Out</h1>
+        <div className="flex items-center justify-between mb-2">
+          <div className="flex items-center gap-3">
+            <LogOut className="flex-shrink-0" size={32} />
+            <h1 className="text-xl sm:text-2xl font-bold">Student Check-Out</h1>
+          </div>
+          {/* TBTC Logo */}
+          <img
+            src={TBTCLogo}
+            alt="TBTC Logo"
+            className="h-16 w-16 sm:h-20 sm:w-20 md:h-24 md:w-24 object-contain flex-shrink-0"
+          />
         </div>
-        <p className="text-purple-100">
+        <p className="text-sm sm:text-base text-purple-100">
           Find your name and check out when you're done
         </p>
       </div>
