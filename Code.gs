@@ -1236,28 +1236,30 @@ function processStudentNames(extractedNames, lotId, checkInTime) {
     }
   }
 
-  // Update Students tab with matched students
+  // Update Students tab with matched and unmatched students
+  const studentsSheet = ss.getSheetByName(SHEETS.STUDENTS.name);
+  if (!studentsSheet) {
+    throw new Error('Students sheet not found');
+  }
+
+  const studentsData = studentsSheet.getDataRange().getValues();
+  const studentsHeaders = studentsData[0];
+
+  const idIndex = studentsHeaders.indexOf('id');
+  const nameIndex = studentsHeaders.indexOf('name');
+  const instrumentIndex = studentsHeaders.indexOf('instrument');
+  const sectionIndex = studentsHeaders.indexOf('section');
+  const yearIndex = studentsHeaders.indexOf('year');
+  const checkedInIndex = studentsHeaders.indexOf('checkedIn');
+  const checkInTimeIndex = studentsHeaders.indexOf('checkInTime');
+  const assignedLotIndex = studentsHeaders.indexOf('assignedLot');
+
+  // Track which students were updated
+  const updatedStudentIds = {};
+  const addedUnmatchedCount = 0;
+
+  // Process matched students first
   if (matched.length > 0) {
-    const studentsSheet = ss.getSheetByName(SHEETS.STUDENTS.name);
-    if (!studentsSheet) {
-      throw new Error('Students sheet not found');
-    }
-
-    const studentsData = studentsSheet.getDataRange().getValues();
-    const studentsHeaders = studentsData[0];
-
-    const idIndex = studentsHeaders.indexOf('id');
-    const nameIndex = studentsHeaders.indexOf('name');
-    const instrumentIndex = studentsHeaders.indexOf('instrument');
-    const sectionIndex = studentsHeaders.indexOf('section');
-    const yearIndex = studentsHeaders.indexOf('year');
-    const checkedInIndex = studentsHeaders.indexOf('checkedIn');
-    const checkInTimeIndex = studentsHeaders.indexOf('checkInTime');
-    const assignedLotIndex = studentsHeaders.indexOf('assignedLot');
-
-    // Track which students were updated
-    const updatedStudentIds = {};
-
     // Update existing students or add new ones
     for (let i = 0; i < matched.length; i++) {
       const matchedStudent = matched[i].student;
@@ -1292,13 +1294,44 @@ function processStudentNames(extractedNames, lotId, checkInTime) {
         updatedStudentIds[matchedStudent.id] = true;
       }
     }
+  }
 
-    // Write updated data back to Students sheet
-    studentsSheet.getRange(1, 1, studentsData.length, studentsData[0].length).setValues(studentsData);
+  // Process unmatched students - add them with placeholder values
+  if (unmatched.length > 0) {
+    const timestamp = new Date().getTime();
+
+    for (let i = 0; i < unmatched.length; i++) {
+      const unmatchedName = unmatched[i];
+
+      // Generate unique ID for unmatched student
+      const unmatchedId = `unmatched-${timestamp}-${i}`;
+
+      // Create new row with placeholder values
+      const newRow = [];
+      newRow[idIndex] = unmatchedId;
+      newRow[nameIndex] = unmatchedName; // Use extracted name exactly as it appears
+      newRow[instrumentIndex] = 'Band Student'; // Placeholder
+      newRow[sectionIndex] = 'Band Student'; // Placeholder
+      newRow[yearIndex] = ''; // Empty string for unknown year
+      newRow[checkedInIndex] = true;
+      newRow[checkInTimeIndex] = checkInTime;
+      newRow[assignedLotIndex] = lotId;
+
+      studentsData.push(newRow);
+      updatedStudentIds[unmatchedId] = true;
+    }
 
     logInfo("processStudentNames",
-      `Updated ${Object.keys(updatedStudentIds).length} students in Students tab for lot ${lotId}`);
+      `Added ${unmatched.length} unmatched students with placeholder values for lot ${lotId}`);
   }
+
+  // Write updated data back to Students sheet
+  studentsSheet.getRange(1, 1, studentsData.length, studentsData[0].length).setValues(studentsData);
+
+  logInfo("processStudentNames",
+    `Updated ${Object.keys(updatedStudentIds).length} total students in Students tab for lot ${lotId} ` +
+    `(${matched.length} matched, ${unmatched.length} unmatched)`);
+
 
   // Calculate match rate
   const matchRate = extractedNames.length > 0

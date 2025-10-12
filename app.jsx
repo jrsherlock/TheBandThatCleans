@@ -720,13 +720,17 @@ const App = () => {
           }
         );
 
-        // Show warning if there are unmatched names
+        // Show info message if there are unmatched names
         if (response.studentMatching.unmatched > 0) {
-          toast.error(
-            `⚠️ ${response.studentMatching.unmatched} names could not be matched to roster`,
+          toast(
+            `ℹ️ ${response.studentMatching.unmatched} name(s) added as "Band Student" - please review and update`,
             {
-              duration: 6000,
-              icon: '⚠️'
+              duration: 7000,
+              icon: 'ℹ️',
+              style: {
+                background: '#3b82f6',
+                color: '#fff',
+              }
             }
           );
         }

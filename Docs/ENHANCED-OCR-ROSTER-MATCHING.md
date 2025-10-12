@@ -208,7 +208,17 @@ Ackermann, Asher    | Tenor Sax   | 10    | MB
 ### 4. Unmatched Names
 - Names not in ActualRoster
 - Similarity score below threshold
-- Reported for manual review
+- **Automatically added to Students tab with placeholder values:**
+  - `id`: "unmatched-{timestamp}-{index}"
+  - `name`: Extracted name exactly as it appears
+  - `instrument`: "Band Student"
+  - `section`: "Band Student"
+  - `year`: "" (empty)
+  - `checkedIn`: true
+  - `checkInTime`: Current timestamp
+  - `assignedLot`: Lot ID
+- Reported in API response for manual review
+- Directors can later update with correct information
 
 ### 5. Missing Data
 - No student names extracted → Count-only mode
