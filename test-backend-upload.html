@@ -1,0 +1,309 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Test Backend Upload</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            max-width: 800px;
+            margin: 50px auto;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        .container {
+            background: white;
+            padding: 30px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #333;
+            margin-bottom: 10px;
+        }
+        .subtitle {
+            color: #666;
+            margin-bottom: 30px;
+        }
+        label {
+            display: block;
+            margin-top: 15px;
+            font-weight: 600;
+            color: #333;
+        }
+        input, textarea {
+            width: 100%;
+            padding: 10px;
+            margin-top: 5px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 14px;
+            box-sizing: border-box;
+        }
+        button {
+            background: #4CAF50;
+            color: white;
+            padding: 12px 24px;
+            border: none;
+            border-radius: 4px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            margin-top: 20px;
+            width: 100%;
+        }
+        button:hover {
+            background: #45a049;
+        }
+        button:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+        }
+        .result {
+            margin-top: 20px;
+            padding: 15px;
+            border-radius: 4px;
+            display: none;
+        }
+        .result.success {
+            background: #d4edda;
+            border: 1px solid #c3e6cb;
+            color: #155724;
+            display: block;
+        }
+        .result.error {
+            background: #f8d7da;
+            border: 1px solid #f5c6cb;
+            color: #721c24;
+            display: block;
+        }
+        pre {
+            background: #f8f9fa;
+            padding: 10px;
+            border-radius: 4px;
+            overflow-x: auto;
+            font-size: 12px;
+        }
+        .info {
+            background: #d1ecf1;
+            border: 1px solid #bee5eb;
+            color: #0c5460;
+            padding: 15px;
+            border-radius: 4px;
+            margin-bottom: 20px;
+        }
+        .loading {
+            display: none;
+            text-align: center;
+            margin-top: 20px;
+        }
+        .loading.active {
+            display: block;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🧪 Test Backend Upload</h1>
+        <p class="subtitle">Test the UPLOAD_SIGNIN_SHEET endpoint directly</p>
+
+        <div class="info">
+            <strong>📋 Instructions:</strong><br>
+            1. Enter your Google Apps Script deployment URL below<br>
+            2. Adjust the test parameters if needed<br>
+            3. Click "Test Upload"<br>
+            4. Check the response and verify data in Google Sheets
+        </div>
+
+        <form id="testForm">
+            <label for="apiUrl">
+                Google Apps Script URL *
+                <small style="color: #666; font-weight: normal;">(e.g., https://script.google.com/macros/s/YOUR_ID/exec)</small>
+            </label>
+            <input 
+                type="url" 
+                id="apiUrl" 
+                placeholder="https://script.google.com/macros/s/YOUR_DEPLOYMENT_ID/exec"
+                required
+            >
+
+            <label for="lotId">
+                Lot ID *
+                <small style="color: #666; font-weight: normal;">(e.g., 101 for Library Lot)</small>
+            </label>
+            <input 
+                type="text" 
+                id="lotId" 
+                value="101"
+                required
+            >
+
+            <label for="studentCount">
+                Student Count *
+            </label>
+            <input 
+                type="number" 
+                id="studentCount" 
+                value="5"
+                min="0"
+                required
+            >
+
+            <label for="countSource">
+                Count Source *
+            </label>
+            <select id="countSource" style="width: 100%; padding: 10px; margin-top: 5px; border: 1px solid #ddd; border-radius: 4px;">
+                <option value="manual">Manual</option>
+                <option value="ai">AI</option>
+            </select>
+
+            <label for="confidence">
+                Confidence (for AI source)
+            </label>
+            <select id="confidence" style="width: 100%; padding: 10px; margin-top: 5px; border: 1px solid #ddd; border-radius: 4px;">
+                <option value="high">High</option>
+                <option value="medium">Medium</option>
+                <option value="low">Low</option>
+            </select>
+
+            <label for="enteredBy">
+                Entered By *
+            </label>
+            <input 
+                type="text" 
+                id="enteredBy" 
+                value="Test User"
+                required
+            >
+
+            <label for="notes">
+                Notes (optional)
+            </label>
+            <textarea 
+                id="notes" 
+                rows="3"
+                placeholder="Test upload from verification script"
+            >Test upload from verification script</textarea>
+
+            <button type="submit">🚀 Test Upload</button>
+        </form>
+
+        <div class="loading" id="loading">
+            <p>⏳ Sending request...</p>
+        </div>
+
+        <div class="result" id="result"></div>
+    </div>
+
+    <script>
+        document.getElementById('testForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+
+            const apiUrl = document.getElementById('apiUrl').value;
+            const lotId = document.getElementById('lotId').value;
+            const studentCount = document.getElementById('studentCount').value;
+            const countSource = document.getElementById('countSource').value;
+            const confidence = document.getElementById('confidence').value;
+            const enteredBy = document.getElementById('enteredBy').value;
+            const notes = document.getElementById('notes').value;
+
+            const resultDiv = document.getElementById('result');
+            const loadingDiv = document.getElementById('loading');
+            const submitBtn = document.querySelector('button[type="submit"]');
+
+            // Show loading
+            loadingDiv.classList.add('active');
+            submitBtn.disabled = true;
+            resultDiv.style.display = 'none';
+
+            try {
+                // Build payload
+                const payload = {
+                    type: 'UPLOAD_SIGNIN_SHEET',
+                    lotId: lotId,
+                    countSource: countSource,
+                    enteredBy: enteredBy,
+                    notes: notes
+                };
+
+                // Add count based on source
+                if (countSource === 'ai') {
+                    payload.aiCount = parseInt(studentCount);
+                    payload.aiConfidence = confidence;
+                } else {
+                    payload.manualCount = parseInt(studentCount);
+                }
+
+                console.log('📤 Sending payload:', payload);
+
+                // Make request (using GET with payload parameter for CORS compatibility)
+                const url = `${apiUrl}?payload=${encodeURIComponent(JSON.stringify(payload))}`;
+                
+                const response = await fetch(url, {
+                    method: 'GET',
+                    redirect: 'follow'
+                });
+
+                const data = await response.json();
+
+                console.log('📥 Response:', data);
+
+                // Show result
+                resultDiv.className = 'result ' + (data.success ? 'success' : 'error');
+                resultDiv.innerHTML = `
+                    <h3>${data.success ? '✅ Success!' : '❌ Error'}</h3>
+                    <p><strong>Message:</strong> ${data.message || data.error || 'Unknown response'}</p>
+                    ${data.success ? `
+                        <p><strong>Lot ID:</strong> ${data.lotId}</p>
+                        <p><strong>Student Count:</strong> ${data.studentCount}</p>
+                        <p><strong>Count Source:</strong> ${data.countSource}</p>
+                        <p><strong>Confidence:</strong> ${data.confidence}</p>
+                        <p><strong>Timestamp:</strong> ${data.timestamp}</p>
+                    ` : ''}
+                    <details style="margin-top: 10px;">
+                        <summary style="cursor: pointer; font-weight: 600;">View Full Response</summary>
+                        <pre>${JSON.stringify(data, null, 2)}</pre>
+                    </details>
+                    ${data.success ? `
+                        <div style="margin-top: 15px; padding: 10px; background: #fff3cd; border: 1px solid #ffc107; border-radius: 4px;">
+                            <strong>✅ Next Step:</strong> Open your Google Sheet and verify the data appears in the "Lots" tab for lot ID ${data.lotId}
+                        </div>
+                    ` : `
+                        <div style="margin-top: 15px; padding: 10px; background: #f8d7da; border: 1px solid #f5c6cb; border-radius: 4px;">
+                            <strong>🔍 Troubleshooting:</strong><br>
+                            • Verify the API URL is correct<br>
+                            • Check that the backend has been deployed<br>
+                            • Ensure the lot ID exists in Google Sheets<br>
+                            • Check Apps Script logs for errors
+                        </div>
+                    `}
+                `;
+
+            } catch (error) {
+                console.error('❌ Error:', error);
+                resultDiv.className = 'result error';
+                resultDiv.innerHTML = `
+                    <h3>❌ Request Failed</h3>
+                    <p><strong>Error:</strong> ${error.message}</p>
+                    <details style="margin-top: 10px;">
+                        <summary style="cursor: pointer; font-weight: 600;">View Error Details</summary>
+                        <pre>${error.stack || error.toString()}</pre>
+                    </details>
+                    <div style="margin-top: 15px; padding: 10px; background: #f8d7da; border: 1px solid #f5c6cb; border-radius: 4px;">
+                        <strong>🔍 Common Causes:</strong><br>
+                        • Invalid API URL<br>
+                        • CORS issues (backend not deployed as "Anyone" access)<br>
+                        • Network connectivity issues<br>
+                        • Backend script errors
+                    </div>
+                `;
+            } finally {
+                loadingDiv.classList.remove('active');
+                submitBtn.disabled = false;
+            }
+        });
+    </script>
+</body>
+</html>
+

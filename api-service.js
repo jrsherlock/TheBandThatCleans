@@ -6,7 +6,7 @@
 // Configuration - Update these values after deploying your Google Apps Script
 const API_CONFIG = {
   // Google Apps Script Web App URL (TBTC - MVP with CORS fixes - Deployed 2025-09-30)
-  BASE_URL: 'https://script.google.com/macros/s/AKfycby3TU0sevcweBobP4OgDvFyfyK42G0rnKP8EHaF62IeTHIsXtUg5g6cTUXpLsX6XHB3/exec',
+  BASE_URL: 'https://script.google.com/macros/s/AKfycbz2SI0ymIGtBgXRZeHunBDNqdyVUmDXUg7DVQNP7bLglkuCgI_enRF6BrBWihVnfgsU/exec',
     
   // API key for authentication (matches MOCK_API_KEY in Code.gs)
   API_KEY: 'tbtc-director-key-2024',
@@ -136,6 +136,7 @@ class TbtcApiService {
    * POST request helper (converted to GET to avoid CORS issues)
    * WORKAROUND: Google Apps Script POST requests have redirect issues with fetch()
    * Solution: Use GET with payload in URL parameter
+   * NOTE: This has URL length limits - use postWithBody() for large payloads
    */
   async post(payload) {
     this.validateConfig();
@@ -151,6 +152,36 @@ class TbtcApiService {
 
     return fetchWithRetry(url, {
       method: 'GET'
+    });
+  }
+
+  /**
+   * POST request with body (for large payloads like image uploads)
+   * Uses URL-encoded form data to avoid CORS preflight issues with Google Apps Script
+   * Google Apps Script receives this in e.parameter (not e.postData)
+   */
+  async postWithBody(payload) {
+    this.validateConfig();
+
+    const requestPayload = {
+      ...payload,
+      apiKey: this.apiKey
+    };
+
+    // Use URLSearchParams for application/x-www-form-urlencoded
+    // This avoids CORS preflight and works reliably with Google Apps Script
+    const formBody = new URLSearchParams();
+    formBody.append('payload', JSON.stringify(requestPayload));
+
+    const url = `${this.baseUrl}`;
+
+    return fetchWithRetry(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded'
+      },
+      body: formBody.toString(),
+      redirect: 'follow'
     });
   }
 
@@ -321,6 +352,34 @@ class TbtcApiService {
     } catch (error) {
       console.error('Failed to process OCR upload:', error);
       throw new ApiError('Failed to process image upload. Please try again.', 500);
+    }
+  }
+
+  // --- AI-ASSISTED SIGN-IN SHEET UPLOAD ---
+
+  /**
+   * Upload sign-in sheet with AI analysis or manual count
+   * Uses POST with body to handle large image data
+   * @param {Object} payload - Upload payload
+   * @param {string} payload.lotId - Lot ID
+   * @param {number} payload.aiCount - AI-detected student count (optional)
+   * @param {number} payload.manualCount - Manual student count (optional)
+   * @param {string} payload.aiConfidence - AI confidence level: "high", "medium", "low" (optional)
+   * @param {string} payload.countSource - Source: "ai" or "manual" (optional)
+   * @param {string} payload.enteredBy - Name of user who submitted (optional)
+   * @param {string} payload.imageData - Base64 encoded image (optional)
+   * @param {string} payload.notes - Additional notes (optional)
+   */
+  async uploadSignInSheet(payload) {
+    try {
+      // Use postWithBody for large payloads (images can be very large)
+      return await this.postWithBody({
+        type: 'UPLOAD_SIGNIN_SHEET',
+        ...payload
+      });
+    } catch (error) {
+      console.error('Failed to upload sign-in sheet:', error);
+      throw new ApiError('Failed to upload sign-in sheet. Please try again.', 500);
     }
   }
 }

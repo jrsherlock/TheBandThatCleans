@@ -669,6 +669,17 @@ const App = () => {
       if (countSource === 'ai' && aiAnalysis) {
         payload.aiCount = count;
         payload.aiConfidence = confidence || aiAnalysis.confidence;
+
+        // Include extracted student names if available
+        if (aiAnalysis.studentNames && Array.isArray(aiAnalysis.studentNames)) {
+          payload.studentNames = aiAnalysis.studentNames;
+        }
+
+        // Include illegible names if available
+        if (aiAnalysis.illegibleNames && Array.isArray(aiAnalysis.illegibleNames)) {
+          payload.illegibleNames = aiAnalysis.illegibleNames;
+        }
+
         // If user manually overrode the AI count, include both
         if (aiAnalysis.count !== count) {
           payload.manualCount = count;
@@ -697,10 +708,33 @@ const App = () => {
       // API call
       const response = await apiService.uploadSignInSheet(payload);
 
-      toast.success(`✅ ${originalLot.name}: ${count} students recorded`, {
-        duration: 4000,
-        icon: countSource === 'ai' ? '🤖' : '✍️'
-      });
+      // Show success message with student matching info if available
+      if (response.studentMatching && response.studentMatching.matched > 0) {
+        const matchRate = Math.round(response.studentMatching.matchRate);
+        toast.success(
+          `✅ ${originalLot.name}: ${count} students recorded\n` +
+          `📋 Matched ${response.studentMatching.matched} students (${matchRate}% match rate)`,
+          {
+            duration: 5000,
+            icon: '🤖'
+          }
+        );
+
+        // Show warning if there are unmatched names
+        if (response.studentMatching.unmatched > 0) {
+          toast.warning(
+            `⚠️ ${response.studentMatching.unmatched} names could not be matched to roster`,
+            {
+              duration: 6000
+            }
+          );
+        }
+      } else {
+        toast.success(`✅ ${originalLot.name}: ${count} students recorded`, {
+          duration: 4000,
+          icon: countSource === 'ai' ? '🤖' : '✍️'
+        });
+      }
 
       // Trigger a manual refresh to get the latest data from backend
       setTimeout(() => {

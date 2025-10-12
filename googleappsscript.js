@@ -12,21 +12,6 @@
  */
 const SPREADSHEET_ID = "1mKnHPzGZDMa54aYyaKUbYYihZw9pRdwE3wr_J5EDRys"; // TODO: Replace with actual ID after creating sheets
 
-/**
- * Google Drive Configuration for Image Storage
- * Images will be stored in a dedicated folder instead of as base64 in the spreadsheet
- */
-const DRIVE_CONFIG = {
-  // Folder name for storing sign-in sheet images
-  FOLDER_NAME: "TBTC Sign-In Sheets",
-
-  // Whether to create the folder if it doesn't exist
-  AUTO_CREATE_FOLDER: true,
-
-  // Image file naming pattern: "signin_sheet_{lotId}_{timestamp}.{ext}"
-  FILE_NAME_PREFIX: "signin_sheet_"
-};
-
 const SHEETS = {
   LOTS: {
     name: "Lots",
@@ -49,12 +34,6 @@ const SHEETS = {
     headers: [
       "id", "name", "instrument", "section", "year",
       "checkedIn", "checkInTime", "assignedLot"
-    ]
-  },
-  ACTUAL_ROSTER: {
-    name: "ActualRoster",
-    headers: [
-      "name", "instrument", "grade", "section"
     ]
   },
   ATTENDANCE_LOG: {
@@ -232,169 +211,12 @@ function doPost(e) {
 
 /**
  * Handles CORS preflight OPTIONS requests.
- * This is critical for allowing POST requests from web applications.
+ * Google Apps Script automatically sets CORS headers for publicly deployed Web Apps.
+ * This function just needs to return a valid response.
  */
 function doOptions(e) {
-  const output = ContentService.createTextOutput(JSON.stringify({ status: 'ok' }))
+  return ContentService.createTextOutput(JSON.stringify({ status: 'ok' }))
     .setMimeType(ContentService.MimeType.JSON);
-
-  return output;
-}
-
-// --- NAME MATCHING UTILITIES ---
-
-/**
- * Calculate Levenshtein distance between two strings
- */
-function levenshteinDistance(str1, str2) {
-  const len1 = str1.length;
-  const len2 = str2.length;
-  const matrix = [];
-
-  for (let i = 0; i <= len1; i++) {
-    matrix[i] = [i];
-  }
-  for (let j = 0; j <= len2; j++) {
-    matrix[0][j] = j;
-  }
-
-  for (let i = 1; i <= len1; i++) {
-    for (let j = 1; j <= len2; j++) {
-      const cost = str1[i - 1] === str2[j - 1] ? 0 : 1;
-      matrix[i][j] = Math.min(
-        matrix[i - 1][j] + 1,
-        matrix[i][j - 1] + 1,
-        matrix[i - 1][j - 1] + cost
-      );
-    }
-  }
-
-  return matrix[len1][len2];
-}
-
-/**
- * Normalize a name for comparison
- */
-function normalizeName(name) {
-  if (!name || typeof name !== 'string') {
-    return { full: '', first: '', last: '', normalized: '' };
-  }
-
-  let cleaned = name.trim().toLowerCase();
-  cleaned = cleaned.replace(/\s+(jr\.?|sr\.?|iii?|iv|v)$/i, '');
-  cleaned = cleaned.replace(/\./g, '').replace(/\s+/g, ' ');
-
-  let first = '';
-  let last = '';
-
-  if (cleaned.indexOf(',') !== -1) {
-    const parts = cleaned.split(',').map(function(p) { return p.trim(); });
-    last = parts[0] || '';
-    first = parts[1] || '';
-  } else {
-    const parts = cleaned.split(' ').filter(function(p) { return p.length > 0; });
-    if (parts.length >= 2) {
-      first = parts[0];
-      last = parts[parts.length - 1];
-    } else if (parts.length === 1) {
-      last = parts[0];
-    }
-  }
-
-  const normalized = [first, last].filter(function(p) { return p; }).join(' ');
-
-  return {
-    full: cleaned,
-    first: first,
-    last: last,
-    normalized: normalized
-  };
-}
-
-/**
- * Calculate similarity score between two names
- */
-function calculateNameSimilarity(name1, name2) {
-  const norm1 = normalizeName(name1);
-  const norm2 = normalizeName(name2);
-
-  if (!norm1.normalized || !norm2.normalized) {
-    return 0;
-  }
-
-  if (norm1.normalized === norm2.normalized) {
-    return 1.0;
-  }
-
-  const lastNameMatch = norm1.last && norm2.last && norm1.last === norm2.last;
-  const firstNameMatch = norm1.first && norm2.first && norm1.first === norm2.first;
-
-  if (lastNameMatch && firstNameMatch) {
-    return 1.0;
-  }
-
-  if (lastNameMatch && norm1.first && norm2.first) {
-    const firstInitialMatch = norm1.first[0] === norm2.first[0];
-    if (firstInitialMatch) {
-      return 0.9;
-    }
-
-    const firstDistance = levenshteinDistance(norm1.first, norm2.first);
-    const maxFirstLen = Math.max(norm1.first.length, norm2.first.length);
-    const firstSimilarity = 1 - (firstDistance / maxFirstLen);
-
-    if (firstSimilarity > 0.7) {
-      return 0.85;
-    }
-  }
-
-  const fullDistance = levenshteinDistance(norm1.normalized, norm2.normalized);
-  const maxLen = Math.max(norm1.normalized.length, norm2.normalized.length);
-  const fullSimilarity = 1 - (fullDistance / maxLen);
-
-  if (fullSimilarity > 0.8) {
-    return fullSimilarity;
-  }
-
-  if (norm1.last === norm2.last && norm1.first && norm2.first) {
-    if (norm1.first.length === 1 && norm2.first[0] === norm1.first[0]) {
-      return 0.75;
-    }
-    if (norm2.first.length === 1 && norm1.first[0] === norm2.first[0]) {
-      return 0.75;
-    }
-  }
-
-  return fullSimilarity;
-}
-
-/**
- * Find best match for a name in roster
- */
-function findBestMatch(extractedName, roster, threshold) {
-  if (!extractedName || !roster || roster.length === 0) {
-    return null;
-  }
-
-  threshold = threshold || 0.7;
-  let bestMatch = null;
-  let bestScore = 0;
-
-  for (let i = 0; i < roster.length; i++) {
-    const student = roster[i];
-    const score = calculateNameSimilarity(extractedName, student.name);
-
-    if (score > bestScore && score >= threshold) {
-      bestScore = score;
-      bestMatch = {
-        student: student,
-        score: score,
-        confidence: score >= 0.95 ? 'exact' : score >= 0.85 ? 'high' : score >= 0.75 ? 'medium' : 'low'
-      };
-    }
-  }
-
-  return bestMatch;
 }
 
 // --- HANDLERS ---
@@ -1024,9 +846,6 @@ function handleSignInSheetUpload(payload) {
     // Convert payload lotId to string for comparison
     const lotIdToUpdate = String(payload.lotId);
 
-    // Variable to store Drive upload result
-    let driveUploadResult = null;
-
     // Find and update lot row
     for (let i = 1; i < data.length; i++) {
       const sheetLotId = String(data[i][idIndex]);
@@ -1034,25 +853,9 @@ function handleSignInSheetUpload(payload) {
       if (sheetLotId === lotIdToUpdate) {
         lotFound = true;
 
-        // Upload image to Google Drive if provided
+        // Store image if provided
         if (payload.imageData) {
-          try {
-            // Upload to Drive and get the file URL
-            driveUploadResult = uploadImageToDrive(payload.imageData, lotIdToUpdate);
-
-            // Store the Drive view URL instead of base64 data
-            // This URL can be used directly in <img> tags
-            data[i][photoIndex] = driveUploadResult.viewUrl;
-
-            logInfo("handleSignInSheetUpload",
-              `Image uploaded to Drive for lot ${lotIdToUpdate}: ${driveUploadResult.fileId}`);
-          } catch (driveError) {
-            // Log error but don't fail the entire operation
-            logError("handleSignInSheetUpload", `Drive upload failed: ${driveError.message}`);
-
-            // Fallback: store a note that upload failed
-            data[i][photoIndex] = `[Upload failed: ${driveError.message}]`;
-          }
+          data[i][photoIndex] = payload.imageData;
         }
 
         // Determine count source and values
@@ -1111,21 +914,7 @@ function handleSignInSheetUpload(payload) {
     logInfo("handleSignInSheetUpload",
       `Sign-in sheet uploaded for lot ${payload.lotId}: ${finalCount} students (${source})`);
 
-    // Process student names if provided (AI extraction)
-    let matchResults = null;
-    if (payload.studentNames && Array.isArray(payload.studentNames) && payload.studentNames.length > 0) {
-      try {
-        matchResults = processStudentNames(payload.studentNames, payload.lotId, currentTime);
-        logInfo("handleSignInSheetUpload",
-          `Processed ${matchResults.matched.length} student names for lot ${payload.lotId}`);
-      } catch (nameError) {
-        logError("handleSignInSheetUpload", `Failed to process student names: ${nameError.message}`);
-        // Don't fail the entire operation if name processing fails
-      }
-    }
-
-    // Build response with Drive upload info if available
-    const response = {
+    return createJsonResponse({
       success: true,
       message: 'Parking Lot Cleanup Sign-in sheet uploaded successfully',
       lotId: payload.lotId,
@@ -1133,184 +922,12 @@ function handleSignInSheetUpload(payload) {
       countSource: source,
       confidence: payload.aiConfidence || 'manual',
       timestamp: currentTime
-    };
-
-    // Include Drive upload details if image was uploaded
-    if (driveUploadResult) {
-      response.imageUpload = {
-        fileId: driveUploadResult.fileId,
-        viewUrl: driveUploadResult.viewUrl,
-        fileName: driveUploadResult.fileName,
-        uploadedAt: driveUploadResult.uploadedAt
-      };
-    }
-
-    // Include student matching results if available
-    if (matchResults) {
-      response.studentMatching = {
-        totalExtracted: payload.studentNames.length,
-        matched: matchResults.matched.length,
-        unmatched: matchResults.unmatched.length,
-        duplicates: matchResults.duplicates.length,
-        matchRate: matchResults.matchRate,
-        matchedStudents: matchResults.matched,
-        unmatchedNames: matchResults.unmatched,
-        duplicateMatches: matchResults.duplicates
-      };
-    }
-
-    return createJsonResponse(response);
+    });
 
   } catch (error) {
     logError("handleSignInSheetUpload", error);
     return createJsonResponse({ error: error.toString() }, 500);
   }
-}
-
-/**
- * Process extracted student names and update Students tab
- * Matches names against ActualRoster and updates check-in status
- */
-function processStudentNames(extractedNames, lotId, checkInTime) {
-  const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
-
-  // Read ActualRoster
-  const rosterSheet = ss.getSheetByName(SHEETS.ACTUAL_ROSTER.name);
-  if (!rosterSheet) {
-    throw new Error('ActualRoster sheet not found');
-  }
-
-  const rosterData = rosterSheet.getDataRange().getValues();
-  const rosterHeaders = rosterData[0];
-
-  // Build roster array with student objects
-  const roster = [];
-  for (let i = 1; i < rosterData.length; i++) {
-    const row = rosterData[i];
-    const nameIndex = rosterHeaders.indexOf('name');
-    const instrumentIndex = rosterHeaders.indexOf('instrument');
-    const gradeIndex = rosterHeaders.indexOf('grade');
-    const sectionIndex = rosterHeaders.indexOf('section');
-
-    if (row[nameIndex]) {
-      roster.push({
-        id: `student-${i}`, // Generate ID based on row number
-        name: row[nameIndex],
-        instrument: row[instrumentIndex] || '',
-        year: row[gradeIndex] ? String(row[gradeIndex]) : '',
-        section: row[sectionIndex] || ''
-      });
-    }
-  }
-
-  // Match extracted names against roster
-  const matched = [];
-  const unmatched = [];
-  const duplicates = [];
-  const matchedStudentIds = {};
-
-  for (let i = 0; i < extractedNames.length; i++) {
-    const extractedName = extractedNames[i];
-    const match = findBestMatch(extractedName, roster, 0.7);
-
-    if (match) {
-      // Check for duplicate matches
-      if (matchedStudentIds[match.student.id]) {
-        duplicates.push({
-          extractedName: extractedName,
-          student: match.student,
-          score: match.score,
-          confidence: match.confidence
-        });
-      } else {
-        matched.push({
-          extractedName: extractedName,
-          student: match.student,
-          score: match.score,
-          confidence: match.confidence
-        });
-        matchedStudentIds[match.student.id] = true;
-      }
-    } else {
-      unmatched.push(extractedName);
-    }
-  }
-
-  // Update Students tab with matched students
-  if (matched.length > 0) {
-    const studentsSheet = ss.getSheetByName(SHEETS.STUDENTS.name);
-    if (!studentsSheet) {
-      throw new Error('Students sheet not found');
-    }
-
-    const studentsData = studentsSheet.getDataRange().getValues();
-    const studentsHeaders = studentsData[0];
-
-    const idIndex = studentsHeaders.indexOf('id');
-    const nameIndex = studentsHeaders.indexOf('name');
-    const instrumentIndex = studentsHeaders.indexOf('instrument');
-    const sectionIndex = studentsHeaders.indexOf('section');
-    const yearIndex = studentsHeaders.indexOf('year');
-    const checkedInIndex = studentsHeaders.indexOf('checkedIn');
-    const checkInTimeIndex = studentsHeaders.indexOf('checkInTime');
-    const assignedLotIndex = studentsHeaders.indexOf('assignedLot');
-
-    // Track which students were updated
-    const updatedStudentIds = {};
-
-    // Update existing students or add new ones
-    for (let i = 0; i < matched.length; i++) {
-      const matchedStudent = matched[i].student;
-      let studentFound = false;
-
-      // Look for existing student in Students tab
-      for (let j = 1; j < studentsData.length; j++) {
-        if (String(studentsData[j][idIndex]) === String(matchedStudent.id)) {
-          // Update existing student
-          studentsData[j][checkedInIndex] = true;
-          studentsData[j][checkInTimeIndex] = checkInTime;
-          studentsData[j][assignedLotIndex] = lotId;
-          studentFound = true;
-          updatedStudentIds[matchedStudent.id] = true;
-          break;
-        }
-      }
-
-      // If student not found, add new row
-      if (!studentFound) {
-        const newRow = [];
-        newRow[idIndex] = matchedStudent.id;
-        newRow[nameIndex] = matchedStudent.name;
-        newRow[instrumentIndex] = matchedStudent.instrument;
-        newRow[sectionIndex] = matchedStudent.section;
-        newRow[yearIndex] = matchedStudent.year;
-        newRow[checkedInIndex] = true;
-        newRow[checkInTimeIndex] = checkInTime;
-        newRow[assignedLotIndex] = lotId;
-
-        studentsData.push(newRow);
-        updatedStudentIds[matchedStudent.id] = true;
-      }
-    }
-
-    // Write updated data back to Students sheet
-    studentsSheet.getRange(1, 1, studentsData.length, studentsData[0].length).setValues(studentsData);
-
-    logInfo("processStudentNames",
-      `Updated ${Object.keys(updatedStudentIds).length} students in Students tab for lot ${lotId}`);
-  }
-
-  // Calculate match rate
-  const matchRate = extractedNames.length > 0
-    ? (matched.length / extractedNames.length) * 100
-    : 0;
-
-  return {
-    matched: matched,
-    unmatched: unmatched,
-    duplicates: duplicates,
-    matchRate: matchRate
-  };
 }
 
 /**
@@ -1400,7 +1017,7 @@ function readSheetData(sheetConfig) {
 }
 
 /**
- * Creates a standard JSON response object for the GAS Web App with CORS headers.
+ * Creates a standard JSON response object for the GAS Web App.
  */
 function createJsonResponse(data, status = 200) {
   // Add status to response data for client-side handling
@@ -1409,14 +1026,10 @@ function createJsonResponse(data, status = 200) {
     responseData.httpStatus = status;
   }
 
-  // CRITICAL: Explicitly set CORS headers
-  // Google Apps Script does NOT automatically set these for all deployment types
-  const output = ContentService.createTextOutput(JSON.stringify(responseData))
+  // Google Apps Script automatically sets CORS headers for publicly deployed Web Apps
+  // No need to manually set Access-Control-Allow-Origin headers
+  return ContentService.createTextOutput(JSON.stringify(responseData))
     .setMimeType(ContentService.MimeType.JSON);
-
-  // Set CORS headers to allow requests from any origin
-  // In production, you may want to restrict this to specific domains
-  return output;
 }
 
 /**
@@ -1436,109 +1049,6 @@ function checkAuth(e, payload) {
   // For development/testing, allow requests without API key
   // In production, change this to return false
   return true;
-}
-
-// --- GOOGLE DRIVE HELPER FUNCTIONS ---
-
-/**
- * Gets or creates the Google Drive folder for storing sign-in sheet images.
- * @returns {GoogleAppsScript.Drive.Folder} The folder object
- */
-function getOrCreateImageFolder() {
-  try {
-    // Search for existing folder
-    const folders = DriveApp.getFoldersByName(DRIVE_CONFIG.FOLDER_NAME);
-
-    if (folders.hasNext()) {
-      const folder = folders.next();
-      logInfo("getOrCreateImageFolder", `Using existing folder: ${folder.getId()}`);
-      return folder;
-    }
-
-    // Create new folder if it doesn't exist and auto-create is enabled
-    if (DRIVE_CONFIG.AUTO_CREATE_FOLDER) {
-      const newFolder = DriveApp.createFolder(DRIVE_CONFIG.FOLDER_NAME);
-      logInfo("getOrCreateImageFolder", `Created new folder: ${newFolder.getId()}`);
-      return newFolder;
-    }
-
-    throw new Error(`Folder "${DRIVE_CONFIG.FOLDER_NAME}" not found and AUTO_CREATE_FOLDER is disabled`);
-  } catch (error) {
-    logError("getOrCreateImageFolder", error);
-    throw error;
-  }
-}
-
-/**
- * Uploads a base64-encoded image to Google Drive.
- * @param {string} base64Data - Base64 encoded image data (with or without data URI prefix)
- * @param {string} lotId - Lot identifier for naming the file
- * @param {string} mimeType - MIME type of the image (default: image/jpeg)
- * @returns {Object} Object containing fileId, fileUrl, and viewUrl
- */
-function uploadImageToDrive(base64Data, lotId, mimeType = 'image/jpeg') {
-  try {
-    // Remove data URI prefix if present (e.g., "data:image/jpeg;base64,")
-    const base64Clean = base64Data.replace(/^data:image\/\w+;base64,/, '');
-
-    // Decode base64 to blob
-    const blob = Utilities.newBlob(
-      Utilities.base64Decode(base64Clean),
-      mimeType,
-      `${DRIVE_CONFIG.FILE_NAME_PREFIX}${lotId}_${new Date().getTime()}.jpg`
-    );
-
-    // Get or create the folder
-    const folder = getOrCreateImageFolder();
-
-    // Check if there's an existing file for this lot and delete it
-    const existingFiles = folder.getFilesByName(blob.getName());
-    while (existingFiles.hasNext()) {
-      const file = existingFiles.next();
-      logInfo("uploadImageToDrive", `Deleting old file: ${file.getId()}`);
-      file.setTrashed(true);
-    }
-
-    // Upload the new file
-    const file = folder.createFile(blob);
-
-    // Make the file accessible to anyone with the link
-    file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
-
-    const fileId = file.getId();
-    const fileUrl = file.getUrl();
-    const viewUrl = `https://drive.google.com/uc?export=view&id=${fileId}`;
-
-    logInfo("uploadImageToDrive", `Uploaded image for lot ${lotId}: ${fileId}`);
-
-    return {
-      fileId: fileId,
-      fileUrl: fileUrl,      // Full Drive URL (for editing/managing)
-      viewUrl: viewUrl,      // Direct view URL (for embedding in apps)
-      fileName: file.getName(),
-      uploadedAt: new Date().toISOString()
-    };
-  } catch (error) {
-    logError("uploadImageToDrive", error);
-    throw new Error(`Failed to upload image to Drive: ${error.message}`);
-  }
-}
-
-/**
- * Deletes an image from Google Drive by file ID.
- * @param {string} fileId - The Google Drive file ID
- * @returns {boolean} True if successful
- */
-function deleteImageFromDrive(fileId) {
-  try {
-    const file = DriveApp.getFileById(fileId);
-    file.setTrashed(true);
-    logInfo("deleteImageFromDrive", `Deleted file: ${fileId}`);
-    return true;
-  } catch (error) {
-    logError("deleteImageFromDrive", error);
-    return false;
-  }
 }
 
 // --- VALIDATION FUNCTIONS ---
