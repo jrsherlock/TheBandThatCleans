@@ -722,10 +722,11 @@ const App = () => {
 
         // Show warning if there are unmatched names
         if (response.studentMatching.unmatched > 0) {
-          toast.warning(
+          toast.error(
             `⚠️ ${response.studentMatching.unmatched} names could not be matched to roster`,
             {
-              duration: 6000
+              duration: 6000,
+              icon: '⚠️'
             }
           );
         }
