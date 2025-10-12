@@ -6,7 +6,7 @@
 import React, { useState, useMemo } from 'react';
 import {
   CheckCircle, Users, MapPin, AlertTriangle, Download, Bell, X,
-  Send, RefreshCw, Music
+  Send, RefreshCw, Music, Sparkles
 } from 'lucide-react';
 import { BarChart, Bar, PieChart, Pie, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell } from 'recharts';
 import { format } from 'date-fns';
@@ -514,10 +514,28 @@ const VolunteerDashboard = ({ lots, students, stats, getStatusStyles, statuses, 
                       <MapPin size={14} />
                       <span className="capitalize">Zone {lot.zone || lot.section}</span>
                     </div>
-                    <div className="flex items-center gap-1">
-                      <Users size={14} />
-                      <span>{lot.totalStudentsSignedUp || 0} students signed up</span>
-                    </div>
+                    {(() => {
+                      const hasAICount = lot.aiStudentCount !== undefined && lot.aiStudentCount !== null && lot.aiStudentCount !== '';
+                      const aiCount = hasAICount ? parseInt(lot.aiStudentCount) || 0 : null;
+                      const manualCount = lot.totalStudentsSignedUp || 0;
+                      const displayCount = hasAICount ? aiCount : manualCount;
+
+                      return (
+                        <div className="flex items-center gap-1">
+                          {hasAICount ? (
+                            <Sparkles size={14} className="text-purple-500 dark:text-purple-400" />
+                          ) : (
+                            <Users size={14} />
+                          )}
+                          <span>{displayCount} students</span>
+                          {hasAICount && (
+                            <span className="text-xs px-1.5 py-0.5 rounded bg-purple-100 dark:bg-purple-900/40 text-purple-700 dark:text-purple-300">
+                              AI
+                            </span>
+                          )}
+                        </div>
+                      );
+                    })()}
                     {lot.comment && (
                       <div className="mt-2 p-2 bg-blue-50 dark:bg-blue-900/30 rounded text-xs text-blue-700 dark:text-blue-300">
                         {lot.comment}
