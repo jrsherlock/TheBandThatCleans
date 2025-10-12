@@ -6,7 +6,7 @@
 // Configuration - Update these values after deploying your Google Apps Script
 const API_CONFIG = {
   // Google Apps Script Web App URL (TBTC - MVP with CORS fixes - Deployed 2025-09-30)
-  BASE_URL: 'https://script.google.com/macros/s/AKfycbw_VKrKgPHH9vaM7tcL5g--Qic0LN_cfkG3WA-IWi4sJE12qT-oyHJQ28CBD8xHcsIC/exec',
+  BASE_URL: 'https://script.google.com/macros/s/AKfycbw9xZQXpaxz3Zaz46_gjiUPPGHJMvYjNBGR9Bx5zaxOdB4wnBaAjbunq8bD_f3ApMcR/exec',
     
   // API key for authentication (matches MOCK_API_KEY in Code.gs)
   API_KEY: 'tbtc-director-key-2024',

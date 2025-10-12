@@ -1280,12 +1280,13 @@ function processStudentNames(extractedNames, lotId, checkInTime) {
 
       // If student not found, add new row
       if (!studentFound) {
-        const newRow = [];
+        // Create array with same length as headers, filled with empty strings
+        const newRow = new Array(studentsHeaders.length).fill('');
         newRow[idIndex] = matchedStudent.id;
         newRow[nameIndex] = matchedStudent.name;
-        newRow[instrumentIndex] = matchedStudent.instrument;
-        newRow[sectionIndex] = matchedStudent.section;
-        newRow[yearIndex] = matchedStudent.year;
+        newRow[instrumentIndex] = matchedStudent.instrument || '';
+        newRow[sectionIndex] = matchedStudent.section || '';
+        newRow[yearIndex] = matchedStudent.year || '';
         newRow[checkedInIndex] = true;
         newRow[checkInTimeIndex] = checkInTime;
         newRow[assignedLotIndex] = lotId;
@@ -1307,7 +1308,8 @@ function processStudentNames(extractedNames, lotId, checkInTime) {
       const unmatchedId = `unmatched-${timestamp}-${i}`;
 
       // Create new row with placeholder values
-      const newRow = [];
+      // Create array with same length as headers, filled with empty strings
+      const newRow = new Array(studentsHeaders.length).fill('');
       newRow[idIndex] = unmatchedId;
       newRow[nameIndex] = unmatchedName; // Use extracted name exactly as it appears
       newRow[instrumentIndex] = 'Band Student'; // Placeholder
