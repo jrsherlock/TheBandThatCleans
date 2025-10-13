@@ -189,7 +189,7 @@ const StudentsScreen = ({ students, currentUser, onStudentUpdate, lots = [] }) =
     return filtered;
   }, [students, searchTerm, sectionFilter, statusFilter, gradeFilter, instrumentFilter, lotFilter, sortColumn, sortDirection, lots]);
 
-  // Statistics - Use AI-scanned lot counts as source of truth
+  // Statistics - Use AI-scanned lot counts as source of truth for ALL user-facing displays
   const stats = useMemo(() => {
     // Calculate total students from AI-scanned lot counts (same as Dashboard)
     const totalStudentsFromLots = lots.reduce((acc, lot) => {
@@ -199,15 +199,23 @@ const StudentsScreen = ({ students, currentUser, onStudentUpdate, lots = [] }) =
       return acc + count;
     }, 0);
 
-    // For individual student tracking (still cleaning, checked out)
-    const stillCleaning = students.filter(s => s.checkedIn && !s.checkOutTime).length;
-    const checkedOut = students.filter(s => s.checkOutTime).length;
+    // DUAL-TRACKING SYSTEM:
+    // - Display: Use lot-level AI counts (accurate, user-facing)
+    // - Background: Individual student check-ins still tracked for analytics
+    //
+    // For user-facing displays, use lot-level counts:
+    // - "Checked In Today" = totalStudentsFromLots (from AI-scanned sheets)
+    // - "Still Cleaning" = totalStudentsFromLots (same as checked in, until check-outs enabled)
+    // - "Checked Out Today" = 0 (check-outs currently disabled)
+    //
+    // Individual student tracking (checkedIn, checkInTime, matchedByAI, etc.) continues
+    // in the background for future analytics and attendance records.
 
     return {
       total: students.length,
-      checkedIn: totalStudentsFromLots, // Use lot counts instead of individual check-ins
-      stillCleaning,
-      checkedOut,
+      checkedIn: totalStudentsFromLots, // Use lot counts for display
+      stillCleaning: totalStudentsFromLots, // Same as checkedIn (check-outs disabled)
+      checkedOut: 0, // Check-outs disabled (will be calculated from lot data when enabled)
       percentage: students.length > 0 ? Math.round(totalStudentsFromLots / students.length * 100) : 0
     };
   }, [students, lots]);
