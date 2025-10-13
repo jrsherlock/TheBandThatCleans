@@ -3,17 +3,15 @@
  * Role-adaptive dashboard that merges Overview + Command Center + Volunteer View
  */
 
-import React, { useState, useMemo } from 'react';
+import { useState, useMemo } from 'react';
 import {
-  CheckCircle, Users, MapPin, AlertTriangle, Download, Bell, X,
+  CheckCircle, Users, MapPin, AlertTriangle, Download, Bell,
   Send, RefreshCw, Music, Sparkles
 } from 'lucide-react';
-import { BarChart, Bar, PieChart, Pie, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell } from 'recharts';
 import { format } from 'date-fns';
 import { motion } from 'framer-motion';
 import { toast } from 'react-hot-toast';
 import { isAdmin, isVolunteer, isStudent } from '../utils/permissions.js';
-import { ProtectedButton } from './ProtectedComponents.jsx';
 import SegmentedProgressBar from './SegmentedProgressBar.jsx';
 
 const MotionDiv = motion.div;
@@ -75,46 +73,11 @@ const Dashboard = ({ lots, students, stats, currentUser, onBulkStatusUpdate, onS
  * Admin Dashboard - Full featured dashboard with command center
  * Merges Overview + Command Center functionality
  */
-const AdminDashboard = ({ lots, students, stats, currentUser, onBulkStatusUpdate, onSendNotification, onExportReport, getStatusStyles, statuses, sections, useTheme }) => {
-  const { isDarkMode } = useTheme();
-  
+const AdminDashboard = ({ lots, students, stats, onBulkStatusUpdate, onSendNotification, onExportReport, getStatusStyles }) => {
   // Command Center state
   const [selectedLots, setSelectedLots] = useState([]);
   const [notificationMessage, setNotificationMessage] = useState("");
   const [showNotificationPanel, setShowNotificationPanel] = useState(false);
-
-  // Computed data for charts
-  const lotDistributionData = useMemo(() => {
-    // Map Tailwind color classes to actual hex values
-    const colorMap = {
-      'bg-gray-500': '#6B7280',
-      'bg-blue-500': '#3B82F6',
-      'bg-red-500': '#EF4444',
-      'bg-yellow-500': '#EAB308',
-      'bg-green-500': '#10B981',
-    };
-
-    return statuses.map(s => {
-      const { label, color } = getStatusStyles(s);
-      return {
-        name: label,
-        value: lots.filter(l => l.status === s).length,
-        color: colorMap[color] || '#6B7280'
-      };
-    });
-  }, [lots, statuses, getStatusStyles]);
-
-  const sectionProgressData = useMemo(() => {
-    return sections.map(sec => {
-      // Use zone field from Google Sheet, fallback to section for backward compatibility
-      const lotsInZone = lots.filter(l => (l.zone || l.section) === sec);
-      return {
-        section: sec.charAt(0).toUpperCase() + sec.slice(1),
-        total: lotsInZone.length,
-        completed: lotsInZone.filter(l => l.status === 'complete').length,
-      };
-    });
-  }, [lots, sections]);
 
   const lotsNeedingHelp = lots ? lots.filter(l => l.status === 'needs-help') : [];
   const pendingApprovalLots = lots.filter(l => l.status === 'pending-approval');
@@ -229,62 +192,94 @@ const AdminDashboard = ({ lots, students, stats, currentUser, onBulkStatusUpdate
         stats={stats}
       />
 
-      {/* Charts and Command Center */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Status Distribution Chart */}
-        <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6 transition-colors duration-200">
-          <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">Lot Status Distribution</h3>
-          <ResponsiveContainer width="100%" height={250}>
-            <PieChart>
-              <Pie
-                data={lotDistributionData}
-                cx="50%"
-                cy="50%"
-                outerRadius={80}
-                dataKey="value"
-                label={({ name, value }) => value > 0 ? `${name}: ${value}` : ''}
-                labelLine={{ stroke: isDarkMode ? '#D1D5DB' : '#374151' }}
-              >
-                {lotDistributionData.map((entry, index) => (
-                  <Cell key={`cell-${index}`} fill={entry.color} />
-                ))}
-              </Pie>
-              <Tooltip
-                contentStyle={{
-                  backgroundColor: isDarkMode ? '#1F2937' : '#FFFFFF',
-                  border: isDarkMode ? '1px solid #374151' : '1px solid #E5E7EB',
-                  borderRadius: '0.5rem',
-                  color: isDarkMode ? '#F3F4F6' : '#1F2937'
-                }}
-                itemStyle={{ color: isDarkMode ? '#F3F4F6' : '#1F2937' }}
-                formatter={(value, name, props) => [`${value} lots`, name]}
-              />
-            </PieChart>
-          </ResponsiveContainer>
-        </div>
+      {/* Student Check-In Counts by Lot */}
+      <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6 transition-colors duration-200">
+        <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">Student Check-Ins by Lot</h3>
+        <div className="space-y-3">
+          {lots
+            .map(lot => {
+              // Determine student count (AI-verified or manual)
+              const hasAICount = lot.aiStudentCount !== undefined && lot.aiStudentCount !== null && lot.aiStudentCount !== '';
+              const aiCount = hasAICount ? parseInt(lot.aiStudentCount) || 0 : null;
+              const manualCount = lot.totalStudentsSignedUp || 0;
+              const studentCount = hasAICount ? aiCount : manualCount;
 
-        {/* Zone Progress Chart */}
-        <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6 transition-colors duration-200">
-          <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">Progress by Zone</h3>
-          <ResponsiveContainer width="100%" height={250}>
-            <BarChart data={sectionProgressData} margin={{ top: 5, right: 30, left: 20, bottom: 5 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke={isDarkMode ? '#374151' : '#E5E7EB'} />
-              <XAxis dataKey="section" stroke={isDarkMode ? '#9CA3AF' : '#6B7280'} style={{ fill: isDarkMode ? '#D1D5DB' : '#374151' }} />
-              <YAxis stroke={isDarkMode ? '#9CA3AF' : '#6B7280'} style={{ fill: isDarkMode ? '#D1D5DB' : '#374151' }} />
-              <Tooltip
-                contentStyle={{
-                  backgroundColor: isDarkMode ? '#1F2937' : '#FFFFFF',
-                  border: isDarkMode ? '1px solid #374151' : '1px solid #E5E7EB',
-                  borderRadius: '0.5rem',
-                  color: isDarkMode ? '#F3F4F6' : '#1F2937'
-                }}
-                itemStyle={{ color: isDarkMode ? '#F3F4F6' : '#1F2937' }}
-              />
-              <Bar dataKey="completed" fill="#10B981" name="Completed" />
-              <Bar dataKey="total" fill={isDarkMode ? '#6B7280' : '#D1D5DB'} name="Total Lots" />
-            </BarChart>
-          </ResponsiveContainer>
+              return {
+                ...lot,
+                studentCount,
+                hasAICount,
+                isAIVerified: hasAICount
+              };
+            })
+            .sort((a, b) => b.studentCount - a.studentCount) // Sort by count descending
+            .map(lot => {
+              const maxCount = Math.max(...lots.map(l => {
+                const hasAI = l.aiStudentCount !== undefined && l.aiStudentCount !== null && l.aiStudentCount !== '';
+                return hasAI ? (parseInt(l.aiStudentCount) || 0) : (l.totalStudentsSignedUp || 0);
+              }));
+              const percentage = maxCount > 0 ? (lot.studentCount / maxCount) * 100 : 0;
+
+              return (
+                <div key={lot.id} className="group">
+                  <div className="flex items-center justify-between mb-1">
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm font-medium text-gray-900 dark:text-white">
+                        {lot.name}
+                      </span>
+                      {lot.isAIVerified && (
+                        <div className="flex items-center gap-1">
+                          <Sparkles size={12} className="text-purple-500 dark:text-purple-400" />
+                          <span className="text-xs px-1.5 py-0.5 rounded bg-purple-100 dark:bg-purple-900/40 text-purple-700 dark:text-purple-300">
+                            AI
+                          </span>
+                        </div>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm font-bold text-gray-900 dark:text-white">
+                        {lot.studentCount}
+                      </span>
+                      <Users size={14} className="text-gray-500 dark:text-gray-400" />
+                    </div>
+                  </div>
+                  <div className="relative h-6 bg-gray-100 dark:bg-gray-700 rounded-full overflow-hidden">
+                    <div
+                      className={`absolute inset-y-0 left-0 rounded-full transition-all duration-500 ${
+                        lot.isAIVerified
+                          ? 'bg-gradient-to-r from-purple-500 to-purple-600 dark:from-purple-600 dark:to-purple-700'
+                          : 'bg-gradient-to-r from-blue-500 to-blue-600 dark:from-blue-600 dark:to-blue-700'
+                      }`}
+                      style={{ width: `${percentage}%` }}
+                    >
+                      {lot.studentCount > 0 && (
+                        <div className="absolute inset-0 flex items-center justify-end pr-2">
+                          <span className="text-xs font-medium text-white">
+                            {lot.studentCount} {lot.studentCount === 1 ? 'student' : 'students'}
+                          </span>
+                        </div>
+                      )}
+                    </div>
+                    {lot.studentCount === 0 && (
+                      <div className="absolute inset-0 flex items-center justify-center">
+                        <span className="text-xs text-gray-500 dark:text-gray-400">
+                          No students checked in
+                        </span>
+                      </div>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-2 mt-1 text-xs text-gray-500 dark:text-gray-400">
+                    <MapPin size={10} />
+                    <span className="capitalize">{lot.zone || lot.section || 'No zone'}</span>
+                  </div>
+                </div>
+              );
+            })}
         </div>
+        {lots.length === 0 && (
+          <div className="text-center py-8 text-gray-500 dark:text-gray-400">
+            No parking lots available
+          </div>
+        )}
       </div>
 
       {/* Command Center Section */}
