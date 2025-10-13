@@ -543,12 +543,19 @@ const App = () => {
     // Total roster size (hardcoded to 246 for now)
     const totalRosterSize = 246;
 
-    // DEBUG: Check-in count comparison
+    // DEBUG: Check-in count comparison with AI matching details
     const digitalCheckInCount = students.filter(s => s.checkedIn).length;
-    console.log('📊 STATS CALCULATION DEBUG:');
-    console.log('  - Dashboard "Students Present" (from lot sign-ups):', totalStudentsSignedUp);
-    console.log('  - Digital check-ins (students.checkedIn=true):', digitalCheckInCount);
-    console.log('  - Discrepancy:', totalStudentsSignedUp - digitalCheckInCount);
+    const aiMatchedCount = students.filter(s => s.matchedByAI && s.checkedIn).length;
+    const manualCheckInCount = students.filter(s => s.manualCheckIn && s.checkedIn).length;
+    const placeholderCount = students.filter(s => s.isPlaceholder && s.checkedIn).length;
+
+    console.log('📊 HYBRID CHECK-IN SYSTEM STATS:');
+    console.log('  ✅ Total Students Checked In:', digitalCheckInCount);
+    console.log('    - 🤖 AI-Matched Students:', aiMatchedCount);
+    console.log('    - ⚠️  Placeholder Students (need reconciliation):', placeholderCount);
+    console.log('    - ✋ Manual Check-Ins:', manualCheckInCount);
+    console.log('  📋 Dashboard Count (from lot sign-ups):', totalStudentsSignedUp);
+    console.log('  🎯 Counts Match?', digitalCheckInCount === totalStudentsSignedUp ? '✅ YES' : '❌ NO');
     console.log('  - Lot breakdown:', lots.map(l => ({
       id: l.id,
       name: l.name,

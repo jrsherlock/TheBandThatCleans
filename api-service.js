@@ -369,6 +369,7 @@ class TbtcApiService {
    * @param {string} payload.enteredBy - Name of user who submitted (optional)
    * @param {string} payload.imageData - Base64 encoded image (optional)
    * @param {string} payload.notes - Additional notes (optional)
+   * @param {Array<string>} payload.studentNames - Array of extracted student names for auto check-in (optional)
    */
   async uploadSignInSheet(payload) {
     try {
@@ -380,6 +381,25 @@ class TbtcApiService {
     } catch (error) {
       console.error('Failed to upload sign-in sheet:', error);
       throw new ApiError('Failed to upload sign-in sheet. Please try again.', 500);
+    }
+  }
+
+  /**
+   * Reconcile a placeholder student with an actual student from the roster
+   * Merges placeholder check-in data with the real student record
+   * @param {string} placeholderId - ID of the placeholder student (e.g., "placeholder-lot48-1")
+   * @param {string} actualStudentId - ID of the actual student from the roster
+   */
+  async reconcilePlaceholderStudent(placeholderId, actualStudentId) {
+    try {
+      return await this.post({
+        type: 'RECONCILE_PLACEHOLDER',
+        placeholderId,
+        actualStudentId
+      });
+    } catch (error) {
+      console.error('Failed to reconcile placeholder student:', error);
+      throw new ApiError('Failed to reconcile placeholder student. Please try again.', 500);
     }
   }
 }

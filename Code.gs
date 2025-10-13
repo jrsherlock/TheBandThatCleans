@@ -141,9 +141,11 @@ function doGet(e) {
           return handleOcrUpload(payload);
         case "UPLOAD_SIGNIN_SHEET":
           return handleSignInSheetUpload(payload);
+        case "RECONCILE_PLACEHOLDER":
+          return handleReconcilePlaceholder(payload);
         default:
           return createJsonResponse({
-            error: `Invalid update type: ${type}. Supported: UPDATE_LOT_STATUS, UPDATE_BULK_STATUS, UPDATE_LOT_DETAILS, UPDATE_STUDENT_STATUS, UPDATE_EVENT_CONFIG, OCR_UPLOAD, UPLOAD_SIGNIN_SHEET`
+            error: `Invalid update type: ${type}. Supported: UPDATE_LOT_STATUS, UPDATE_BULK_STATUS, UPDATE_LOT_DETAILS, UPDATE_STUDENT_STATUS, UPDATE_EVENT_CONFIG, OCR_UPLOAD, UPLOAD_SIGNIN_SHEET, RECONCILE_PLACEHOLDER`
           }, 400);
       }
     }
@@ -222,9 +224,11 @@ function doPost(e) {
         return handleOcrUpload(payload);
       case "UPLOAD_SIGNIN_SHEET":
         return handleSignInSheetUpload(payload);
+      case "RECONCILE_PLACEHOLDER":
+        return handleReconcilePlaceholder(payload);
       default:
         return createJsonResponse({
-          error: `Invalid POST type: ${type}. Supported: UPDATE_LOT_STATUS, UPDATE_BULK_STATUS, UPDATE_LOT_DETAILS, UPDATE_STUDENT_STATUS, UPDATE_EVENT_CONFIG, OCR_UPLOAD, UPLOAD_SIGNIN_SHEET`
+          error: `Invalid POST type: ${type}. Supported: UPDATE_LOT_STATUS, UPDATE_BULK_STATUS, UPDATE_LOT_DETAILS, UPDATE_STUDENT_STATUS, UPDATE_EVENT_CONFIG, OCR_UPLOAD, UPLOAD_SIGNIN_SHEET, RECONCILE_PLACEHOLDER`
         }, 400);
     }
   } catch (error) {
@@ -373,13 +377,15 @@ function calculateNameSimilarity(name1, name2) {
 
 /**
  * Find best match for a name in roster
+ * Enhanced with configurable threshold (default 0.85 for higher accuracy)
  */
 function findBestMatch(extractedName, roster, threshold) {
   if (!extractedName || !roster || roster.length === 0) {
     return null;
   }
 
-  threshold = threshold || 0.7;
+  // Default threshold raised to 0.85 for better accuracy
+  threshold = threshold || 0.85;
   let bestMatch = null;
   let bestScore = 0;
 
@@ -778,6 +784,11 @@ function handleUpdateStudentStatus(payload) {
     const timeIndex = headers.indexOf("checkInTime");
     const lotIndex = headers.indexOf("assignedLot");
 
+    // New tracking fields
+    const matchedByAIIndex = headers.indexOf("matchedByAI");
+    const manualCheckInIndex = headers.indexOf("manualCheckIn");
+    const isPlaceholderIndex = headers.indexOf("isPlaceholder");
+
     const currentTime = new Date();
     let studentFound = false;
     let studentName = "";
@@ -802,6 +813,11 @@ function handleUpdateStudentStatus(payload) {
         // Only update checkInTime when checking IN
         if (isCheckIn) {
           data[i][timeIndex] = currentTime.toISOString();
+
+          // Set manual check-in flag (this is a manual check-in via the app)
+          if (manualCheckInIndex >= 0) data[i][manualCheckInIndex] = true;
+          if (matchedByAIIndex >= 0) data[i][matchedByAIIndex] = false;
+          if (isPlaceholderIndex >= 0) data[i][isPlaceholderIndex] = false;
         }
 
         // Handle check-out: log to attendance and clear lot assignment
@@ -1227,21 +1243,145 @@ function handleSignInSheetUpload(payload) {
     // Include student matching results if available
     if (matchResults) {
       response.studentMatching = {
-        totalExtracted: payload.studentNames.length,
-        matched: matchResults.matched.length,
-        unmatched: matchResults.unmatched.length,
-        duplicates: matchResults.duplicates.length,
+        totalExtracted: matchResults.totalProcessed,
+        matched: matchResults.matchedCount,
+        placeholders: matchResults.placeholderCount,
+        duplicates: matchResults.duplicateCount,
         matchRate: matchResults.matchRate,
         matchedStudents: matchResults.matched,
-        unmatchedNames: matchResults.unmatched,
+        placeholderStudents: matchResults.unmatched,
         duplicateMatches: matchResults.duplicates
       };
+
+      // Update success message with matching details
+      if (matchResults.placeholderCount > 0) {
+        response.message = `Sign-in sheet uploaded successfully. ` +
+          `Checked in ${matchResults.matchedCount} students (${matchResults.placeholderCount} require reconciliation)`;
+      } else {
+        response.message = `Sign-in sheet uploaded successfully. ` +
+          `Checked in ${matchResults.matchedCount} students (all matched)`;
+      }
     }
 
     return createJsonResponse(response);
 
   } catch (error) {
     logError("handleSignInSheetUpload", error);
+    return createJsonResponse({ error: error.toString() }, 500);
+  }
+}
+
+/**
+ * Reconcile a placeholder student with an actual student from the roster
+ * Merges placeholder check-in data with the real student record
+ */
+function handleReconcilePlaceholder(payload) {
+  try {
+    if (!payload.placeholderId || !payload.actualStudentId) {
+      return createJsonResponse({
+        error: "Both placeholderId and actualStudentId are required"
+      }, 400);
+    }
+
+    const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+    const studentsSheet = ss.getSheetByName(SHEETS.STUDENTS.name);
+
+    if (!studentsSheet) {
+      return createJsonResponse({ error: 'Students sheet not found' }, 404);
+    }
+
+    const studentsData = studentsSheet.getDataRange().getValues();
+    const headers = studentsData[0];
+
+    // Find column indices
+    const idIndex = headers.indexOf('id');
+    const checkedInIndex = headers.indexOf('checkedIn');
+    const checkInTimeIndex = headers.indexOf('checkInTime');
+    const assignedLotIndex = headers.indexOf('assignedLot');
+    const matchedByAIIndex = headers.indexOf('matchedByAI');
+    const manualCheckInIndex = headers.indexOf('manualCheckIn');
+    const isPlaceholderIndex = headers.indexOf('isPlaceholder');
+    const extractedNameTextIndex = headers.indexOf('extractedNameText');
+    const requiresReconciliationIndex = headers.indexOf('requiresReconciliation');
+
+    let placeholderRow = null;
+    let placeholderIndex = -1;
+    let actualStudentRow = null;
+    let actualStudentIndex = -1;
+
+    // Find placeholder and actual student rows
+    for (let i = 1; i < studentsData.length; i++) {
+      const rowId = String(studentsData[i][idIndex]);
+
+      if (rowId === String(payload.placeholderId)) {
+        placeholderRow = studentsData[i];
+        placeholderIndex = i;
+      }
+
+      if (rowId === String(payload.actualStudentId)) {
+        actualStudentRow = studentsData[i];
+        actualStudentIndex = i;
+      }
+
+      if (placeholderRow && actualStudentRow) break;
+    }
+
+    if (!placeholderRow) {
+      return createJsonResponse({
+        error: `Placeholder student not found: ${payload.placeholderId}`
+      }, 404);
+    }
+
+    if (!actualStudentRow) {
+      return createJsonResponse({
+        error: `Actual student not found: ${payload.actualStudentId}`
+      }, 404);
+    }
+
+    // Check if actual student is already checked in
+    if (actualStudentRow[checkedInIndex] === true) {
+      return createJsonResponse({
+        error: 'This student is already checked in. Cannot reconcile with placeholder.',
+        warning: 'Student may have been checked in manually or through another sign-in sheet.'
+      }, 400);
+    }
+
+    // Transfer check-in data from placeholder to actual student
+    studentsData[actualStudentIndex][checkedInIndex] = placeholderRow[checkedInIndex];
+    studentsData[actualStudentIndex][checkInTimeIndex] = placeholderRow[checkInTimeIndex];
+    studentsData[actualStudentIndex][assignedLotIndex] = placeholderRow[assignedLotIndex];
+
+    // Set tracking fields on actual student
+    if (matchedByAIIndex >= 0) studentsData[actualStudentIndex][matchedByAIIndex] = true;
+    if (manualCheckInIndex >= 0) studentsData[actualStudentIndex][manualCheckInIndex] = false;
+    if (isPlaceholderIndex >= 0) studentsData[actualStudentIndex][isPlaceholderIndex] = false;
+    if (extractedNameTextIndex >= 0) {
+      studentsData[actualStudentIndex][extractedNameTextIndex] = placeholderRow[extractedNameTextIndex];
+    }
+    if (requiresReconciliationIndex >= 0) {
+      studentsData[actualStudentIndex][requiresReconciliationIndex] = false;
+    }
+
+    // Delete placeholder row
+    studentsData.splice(placeholderIndex, 1);
+
+    // Write updated data back to sheet
+    studentsSheet.clearContents();
+    studentsSheet.getRange(1, 1, studentsData.length, studentsData[0].length).setValues(studentsData);
+
+    logInfo("handleReconcilePlaceholder",
+      `Reconciled placeholder ${payload.placeholderId} with student ${payload.actualStudentId}`);
+
+    return createJsonResponse({
+      success: true,
+      message: 'Placeholder student successfully reconciled',
+      placeholderId: payload.placeholderId,
+      actualStudentId: payload.actualStudentId,
+      studentName: actualStudentRow[headers.indexOf('name')]
+    });
+
+  } catch (error) {
+    logError("handleReconcilePlaceholder", error);
     return createJsonResponse({ error: error.toString() }, 500);
   }
 }
@@ -1288,9 +1428,10 @@ function processStudentNames(extractedNames, lotId, checkInTime) {
   const duplicates = [];
   const matchedStudentIds = {};
 
+  // Use 0.85 threshold for auto-matching (higher accuracy)
   for (let i = 0; i < extractedNames.length; i++) {
     const extractedName = extractedNames[i];
-    const match = findBestMatch(extractedName, roster, 0.7);
+    const match = findBestMatch(extractedName, roster, 0.85);
 
     if (match) {
       // Check for duplicate matches
@@ -1333,6 +1474,13 @@ function processStudentNames(extractedNames, lotId, checkInTime) {
   const checkInTimeIndex = studentsHeaders.indexOf('checkInTime');
   const assignedLotIndex = studentsHeaders.indexOf('assignedLot');
 
+  // New tracking fields for AI check-in system
+  const matchedByAIIndex = studentsHeaders.indexOf('matchedByAI');
+  const manualCheckInIndex = studentsHeaders.indexOf('manualCheckIn');
+  const isPlaceholderIndex = studentsHeaders.indexOf('isPlaceholder');
+  const extractedNameTextIndex = studentsHeaders.indexOf('extractedNameText');
+  const requiresReconciliationIndex = studentsHeaders.indexOf('requiresReconciliation');
+
   // Track which students were updated
   const updatedStudentIds = {};
   const addedUnmatchedCount = 0;
@@ -1347,10 +1495,26 @@ function processStudentNames(extractedNames, lotId, checkInTime) {
       // Look for existing student in Students tab
       for (let j = 1; j < studentsData.length; j++) {
         if (String(studentsData[j][idIndex]) === String(matchedStudent.id)) {
-          // Update existing student
+          // Skip if already checked in (duplicate prevention - first check-in wins)
+          if (studentsData[j][checkedInIndex] === true) {
+            logInfo("processStudentNames",
+              `Student ${matchedStudent.name} already checked in, skipping duplicate`);
+            studentFound = true;
+            break;
+          }
+
+          // Update existing student with AI check-in
           studentsData[j][checkedInIndex] = true;
           studentsData[j][checkInTimeIndex] = checkInTime;
           studentsData[j][assignedLotIndex] = lotId;
+
+          // Set AI tracking fields
+          if (matchedByAIIndex >= 0) studentsData[j][matchedByAIIndex] = true;
+          if (manualCheckInIndex >= 0) studentsData[j][manualCheckInIndex] = false;
+          if (isPlaceholderIndex >= 0) studentsData[j][isPlaceholderIndex] = false;
+          if (extractedNameTextIndex >= 0) studentsData[j][extractedNameTextIndex] = matched[i].extractedName;
+          if (requiresReconciliationIndex >= 0) studentsData[j][requiresReconciliationIndex] = false;
+
           studentFound = true;
           updatedStudentIds[matchedStudent.id] = true;
           break;
@@ -1370,6 +1534,13 @@ function processStudentNames(extractedNames, lotId, checkInTime) {
         newRow[checkInTimeIndex] = checkInTime;
         newRow[assignedLotIndex] = lotId;
 
+        // Set AI tracking fields for new students
+        if (matchedByAIIndex >= 0) newRow[matchedByAIIndex] = true;
+        if (manualCheckInIndex >= 0) newRow[manualCheckInIndex] = false;
+        if (isPlaceholderIndex >= 0) newRow[isPlaceholderIndex] = false;
+        if (extractedNameTextIndex >= 0) newRow[extractedNameTextIndex] = matched[i].extractedName;
+        if (requiresReconciliationIndex >= 0) newRow[requiresReconciliationIndex] = false;
+
         studentsData.push(newRow);
         updatedStudentIds[matchedStudent.id] = true;
       }
@@ -1380,30 +1551,56 @@ function processStudentNames(extractedNames, lotId, checkInTime) {
   if (unmatched.length > 0) {
     const timestamp = new Date().getTime();
 
+    // Get lot name for better placeholder naming
+    const lotsSheet = ss.getSheetByName(SHEETS.LOTS.name);
+    let lotName = lotId;
+    if (lotsSheet) {
+      const lotsData = lotsSheet.getDataRange().getValues();
+      const lotsHeaders = lotsData[0];
+      const lotIdIdx = lotsHeaders.indexOf('id');
+      const lotNameIdx = lotsHeaders.indexOf('name');
+
+      for (let i = 1; i < lotsData.length; i++) {
+        if (String(lotsData[i][lotIdIdx]) === String(lotId)) {
+          lotName = lotsData[i][lotNameIdx] || lotId;
+          break;
+        }
+      }
+    }
+
     for (let i = 0; i < unmatched.length; i++) {
       const unmatchedName = unmatched[i];
 
-      // Generate unique ID for unmatched student
-      const unmatchedId = `unmatched-${timestamp}-${i}`;
+      // Generate unique ID for placeholder student
+      const placeholderId = `placeholder-${lotId}-${i + 1}`;
+
+      // Create friendly placeholder name: "Lot 48 - Unidentified #1"
+      const placeholderDisplayName = `${lotName} - Unidentified #${i + 1}`;
 
       // Create new row with placeholder values
-      // Create array with same length as headers, filled with empty strings
       const newRow = new Array(studentsHeaders.length).fill('');
-      newRow[idIndex] = unmatchedId;
-      newRow[nameIndex] = unmatchedName; // Use extracted name exactly as it appears
-      newRow[instrumentIndex] = 'Band Student'; // Placeholder
-      newRow[sectionIndex] = 'Band Student'; // Placeholder
-      newRow[yearIndex] = ''; // Empty string for unknown year
+      newRow[idIndex] = placeholderId;
+      newRow[nameIndex] = placeholderDisplayName;
+      newRow[instrumentIndex] = ''; // Empty for unknown
+      newRow[sectionIndex] = ''; // Empty for unknown
+      newRow[yearIndex] = ''; // Empty for unknown
       newRow[checkedInIndex] = true;
       newRow[checkInTimeIndex] = checkInTime;
       newRow[assignedLotIndex] = lotId;
 
+      // Set placeholder tracking fields
+      if (matchedByAIIndex >= 0) newRow[matchedByAIIndex] = false;
+      if (manualCheckInIndex >= 0) newRow[manualCheckInIndex] = false;
+      if (isPlaceholderIndex >= 0) newRow[isPlaceholderIndex] = true;
+      if (extractedNameTextIndex >= 0) newRow[extractedNameTextIndex] = unmatchedName; // Store raw OCR text
+      if (requiresReconciliationIndex >= 0) newRow[requiresReconciliationIndex] = true;
+
       studentsData.push(newRow);
-      updatedStudentIds[unmatchedId] = true;
+      updatedStudentIds[placeholderId] = true;
     }
 
     logInfo("processStudentNames",
-      `Added ${unmatched.length} unmatched students with placeholder values for lot ${lotId}`);
+      `Added ${unmatched.length} placeholder students for lot ${lotId} (require reconciliation)`);
   }
 
   // Write updated data back to Students sheet
@@ -1411,8 +1608,7 @@ function processStudentNames(extractedNames, lotId, checkInTime) {
 
   logInfo("processStudentNames",
     `Updated ${Object.keys(updatedStudentIds).length} total students in Students tab for lot ${lotId} ` +
-    `(${matched.length} matched, ${unmatched.length} unmatched)`);
-
+    `(${matched.length} AI-matched, ${unmatched.length} placeholders created)`);
 
   // Calculate match rate
   const matchRate = extractedNames.length > 0
@@ -1423,7 +1619,11 @@ function processStudentNames(extractedNames, lotId, checkInTime) {
     matched: matched,
     unmatched: unmatched,
     duplicates: duplicates,
-    matchRate: matchRate
+    matchRate: matchRate,
+    totalProcessed: extractedNames.length,
+    matchedCount: matched.length,
+    placeholderCount: unmatched.length,
+    duplicateCount: duplicates.length
   };
 }
 

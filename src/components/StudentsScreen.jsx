@@ -106,6 +106,9 @@ const StudentsScreen = ({ students, currentUser, onStudentUpdate, lots = [] }) =
   const [sortColumn, setSortColumn] = useState("name");
   const [sortDirection, setSortDirection] = useState("asc");
   const [showAnalytics, setShowAnalytics] = useState(false);
+  const [reconcileModalOpen, setReconcileModalOpen] = useState(false);
+  const [selectedPlaceholder, setSelectedPlaceholder] = useState(null);
+  const [reconcileSearchTerm, setReconcileSearchTerm] = useState("");
 
   const canCheckIn = hasPermission(currentUser, 'canCheckInStudents');
   const canView = hasPermission(currentUser, 'canViewStudentRoster');
@@ -222,6 +225,36 @@ const StudentsScreen = ({ students, currentUser, onStudentUpdate, lots = [] }) =
       toast.success(`${student.name} checked in!`, { icon: '✅' });
     } else {
       toast.error(`${student.name} checked out.`, { icon: '🚪' });
+    }
+  };
+
+  const handleOpenReconcileModal = (placeholder) => {
+    setSelectedPlaceholder(placeholder);
+    setReconcileSearchTerm(placeholder.extractedNameText || "");
+    setReconcileModalOpen(true);
+  };
+
+  const handleCloseReconcileModal = () => {
+    setReconcileModalOpen(false);
+    setSelectedPlaceholder(null);
+    setReconcileSearchTerm("");
+  };
+
+  const handleReconcile = async (actualStudentId) => {
+    if (!selectedPlaceholder) return;
+
+    try {
+      const apiService = (await import('../../api-service.js')).default;
+      await apiService.reconcilePlaceholderStudent(selectedPlaceholder.id, actualStudentId);
+
+      toast.success('Placeholder student successfully matched!', { icon: '✅' });
+      handleCloseReconcileModal();
+
+      // Trigger data reload (parent component should handle this)
+      window.location.reload();
+    } catch (error) {
+      console.error('Failed to reconcile placeholder:', error);
+      toast.error('Failed to match placeholder student. Please try again.');
     }
   };
 
@@ -525,7 +558,33 @@ const StudentsScreen = ({ students, currentUser, onStudentUpdate, lots = [] }) =
                   >
                     {/* Student Name */}
                     <td className="px-4 py-3 font-medium text-gray-900 dark:text-white">
-                      {student.name}
+                      <div className="flex items-center gap-2">
+                        <span>{student.name}</span>
+                        {student.isPlaceholder && (
+                          <span
+                            className="inline-flex items-center gap-1 px-2 py-0.5 bg-yellow-100 dark:bg-yellow-900/40 text-yellow-800 dark:text-yellow-300 text-xs rounded-full"
+                            title={`Extracted name: "${student.extractedNameText || 'Unknown'}"`}
+                          >
+                            ⚠️ Requires Reconciliation
+                          </span>
+                        )}
+                        {student.matchedByAI && !student.isPlaceholder && (
+                          <span
+                            className="inline-flex items-center gap-1 px-2 py-0.5 bg-blue-100 dark:bg-blue-900/40 text-blue-800 dark:text-blue-300 text-xs rounded-full"
+                            title="Automatically checked in from sign-in sheet"
+                          >
+                            🤖 AI Matched
+                          </span>
+                        )}
+                        {student.manualCheckIn && (
+                          <span
+                            className="inline-flex items-center gap-1 px-2 py-0.5 bg-purple-100 dark:bg-purple-900/40 text-purple-800 dark:text-purple-300 text-xs rounded-full"
+                            title="Manually checked in (exception case)"
+                          >
+                            ✋ Manual
+                          </span>
+                        )}
+                      </div>
                     </td>
 
                     {/* Instrument */}
@@ -610,18 +669,28 @@ const StudentsScreen = ({ students, currentUser, onStudentUpdate, lots = [] }) =
                     {/* Action */}
                     {canCheckIn && (
                       <td className="px-4 py-3 text-center">
-                        <button
-                          onClick={() => handleManualCheckIn(student.id, student.checkedIn)}
-                          className={`
-                            px-3 py-1 rounded text-xs font-medium transition-colors
-                            ${student.checkedIn
-                              ? 'bg-red-100 dark:bg-red-900/40 text-red-700 dark:text-red-300 hover:bg-red-200 dark:hover:bg-red-900/60'
-                              : 'bg-green-100 dark:bg-green-900/40 text-green-700 dark:text-green-300 hover:bg-green-200 dark:hover:bg-green-900/60'
-                            }
-                          `}
-                        >
-                          {student.checkedIn ? 'Check Out' : 'Check In'}
-                        </button>
+                        {student.isPlaceholder ? (
+                          <button
+                            onClick={() => handleOpenReconcileModal(student)}
+                            className="px-3 py-1 rounded text-xs font-medium transition-colors bg-yellow-100 dark:bg-yellow-900/40 text-yellow-700 dark:text-yellow-300 hover:bg-yellow-200 dark:hover:bg-yellow-900/60"
+                          >
+                            Match to Student
+                          </button>
+                        ) : (
+                          <button
+                            onClick={() => handleManualCheckIn(student.id, student.checkedIn)}
+                            className={`
+                              px-3 py-1 rounded text-xs font-medium transition-colors
+                              ${student.checkedIn
+                                ? 'bg-red-100 dark:bg-red-900/40 text-red-700 dark:text-red-300 hover:bg-red-200 dark:hover:bg-red-900/60'
+                                : 'bg-green-100 dark:bg-green-900/40 text-green-700 dark:text-green-300 hover:bg-green-200 dark:hover:bg-green-900/60'
+                              }
+                            `}
+                            title={student.checkedIn ? "Check Out (Exception Cases Only)" : "Manual Check-In (Exception Cases Only)"}
+                          >
+                            {student.checkedIn ? 'Check Out' : 'Check In'}
+                          </button>
+                        )}
                       </td>
                     )}
                   </motion.tr>
@@ -643,6 +712,112 @@ const StudentsScreen = ({ students, currentUser, onStudentUpdate, lots = [] }) =
           </tbody>
         </table>
       </div>
+
+      {/* Reconciliation Modal */}
+      {reconcileModalOpen && selectedPlaceholder && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <MotionDiv
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            className="bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-2xl w-full max-h-[80vh] overflow-hidden"
+          >
+            {/* Modal Header */}
+            <div className="px-6 py-4 border-b border-gray-200 dark:border-gray-700">
+              <div className="flex items-center justify-between">
+                <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
+                  Match Placeholder Student
+                </h3>
+                <button
+                  onClick={handleCloseReconcileModal}
+                  className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
+                >
+                  <X size={20} />
+                </button>
+              </div>
+            </div>
+
+            {/* Modal Body */}
+            <div className="px-6 py-4 space-y-4 overflow-y-auto max-h-[60vh]">
+              {/* Placeholder Info */}
+              <div className="bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg p-4">
+                <h4 className="font-medium text-yellow-900 dark:text-yellow-200 mb-2">
+                  Placeholder Student Information
+                </h4>
+                <div className="space-y-1 text-sm text-yellow-800 dark:text-yellow-300">
+                  <p><strong>Display Name:</strong> {selectedPlaceholder.name}</p>
+                  <p><strong>Extracted from Sign-In Sheet:</strong> "{selectedPlaceholder.extractedNameText || 'Unknown'}"</p>
+                  <p><strong>Assigned Lot:</strong> {getLotName(selectedPlaceholder.assignedLot, lots)}</p>
+                  <p><strong>Check-In Time:</strong> {selectedPlaceholder.checkInTime ? format(new Date(selectedPlaceholder.checkInTime), 'h:mm a') : 'Unknown'}</p>
+                </div>
+              </div>
+
+              {/* Search Box */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                  Search for Matching Student
+                </label>
+                <input
+                  type="text"
+                  value={reconcileSearchTerm}
+                  onChange={(e) => setReconcileSearchTerm(e.target.value)}
+                  placeholder="Type student name..."
+                  className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 dark:focus:ring-blue-400"
+                  autoFocus
+                />
+              </div>
+
+              {/* Student List */}
+              <div>
+                <h4 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                  Select Actual Student
+                </h4>
+                <div className="space-y-2 max-h-64 overflow-y-auto">
+                  {students
+                    .filter(s =>
+                      !s.isPlaceholder &&
+                      !s.checkedIn &&
+                      s.name.toLowerCase().includes(reconcileSearchTerm.toLowerCase())
+                    )
+                    .map(student => (
+                      <button
+                        key={student.id}
+                        onClick={() => handleReconcile(student.id)}
+                        className="w-full text-left px-4 py-3 bg-gray-50 dark:bg-gray-700 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded-lg transition-colors border border-gray-200 dark:border-gray-600"
+                      >
+                        <div className="font-medium text-gray-900 dark:text-white">
+                          {student.name}
+                        </div>
+                        <div className="text-sm text-gray-600 dark:text-gray-400">
+                          {student.instrument} • {student.section} • Grade {student.grade}
+                        </div>
+                      </button>
+                    ))}
+                  {students.filter(s =>
+                    !s.isPlaceholder &&
+                    !s.checkedIn &&
+                    s.name.toLowerCase().includes(reconcileSearchTerm.toLowerCase())
+                  ).length === 0 && (
+                    <div className="text-center py-8 text-gray-500 dark:text-gray-400">
+                      <p>No matching students found</p>
+                      <p className="text-sm mt-1">Try adjusting your search term</p>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            {/* Modal Footer */}
+            <div className="px-6 py-4 border-t border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900/50">
+              <button
+                onClick={handleCloseReconcileModal}
+                className="px-4 py-2 bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-300 dark:hover:bg-gray-600 transition-colors"
+              >
+                Cancel
+              </button>
+            </div>
+          </MotionDiv>
+        </div>
+      )}
     </div>
   );
 };
