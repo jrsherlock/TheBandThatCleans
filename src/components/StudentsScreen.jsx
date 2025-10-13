@@ -91,10 +91,9 @@ const StudentsScreen = ({ students, currentUser, onStudentUpdate, lots = [] }) =
   const [searchTerm, setSearchTerm] = useState("");
   const [sectionFilter, setSectionFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState("all");
-  const [yearFilter, setYearFilter] = useState("all");
+  const [gradeFilter, setGradeFilter] = useState("all");
   const [instrumentFilter, setInstrumentFilter] = useState("all");
   const [lotFilter, setLotFilter] = useState("all");
-  const [attendanceFilter, setAttendanceFilter] = useState("all");
   const [sortColumn, setSortColumn] = useState("name");
   const [sortDirection, setSortDirection] = useState("asc");
   const [showAnalytics, setShowAnalytics] = useState(false);
@@ -104,12 +103,12 @@ const StudentsScreen = ({ students, currentUser, onStudentUpdate, lots = [] }) =
 
   // Get unique values for filters
   const sections = useMemo(() => Array.from(new Set(students.map(s => s.section).filter(Boolean))), [students]);
-  const years = useMemo(() => {
-    const validYears = students
-      .map(s => s.year)
-      .filter(y => y !== null && y !== undefined && y !== '')
-      .map(y => String(y));
-    return Array.from(new Set(validYears));
+  const grades = useMemo(() => {
+    const validGrades = students
+      .map(s => s.grade)
+      .filter(g => g !== null && g !== undefined && g !== '')
+      .map(g => String(g));
+    return Array.from(new Set(validGrades)).sort();
   }, [students]);
   const instruments = useMemo(() => Array.from(new Set(students.map(s => s.instrument).filter(Boolean))), [students]);
 
@@ -125,33 +124,11 @@ const StudentsScreen = ({ students, currentUser, onStudentUpdate, lots = [] }) =
         (statusFilter === "not-checked-in" && !s.checkedIn) ||
         (statusFilter === "checked-out" && s.checkOutTime) ||
         (statusFilter === "still-cleaning" && s.checkedIn && !s.checkOutTime);
-      const yearMatch = yearFilter === "all" || s.year === yearFilter;
+      const gradeMatch = gradeFilter === "all" || s.grade === gradeFilter;
       const instrumentMatch = instrumentFilter === "all" || s.instrument === instrumentFilter;
       const lotMatch = lotFilter === "all" || s.assignedLot === lotFilter;
 
-      // Attendance filter
-      let attendanceMatch = true;
-      if (attendanceFilter !== "all") {
-        const metrics = calculateAttendanceMetrics(s);
-        switch (attendanceFilter) {
-          case "3+":
-            attendanceMatch = metrics.attended >= 3;
-            break;
-          case "5+":
-            attendanceMatch = metrics.attended >= 5;
-            break;
-          case "perfect":
-            attendanceMatch = metrics.attended === 7;
-            break;
-          case "low":
-            attendanceMatch = metrics.attended < 3;
-            break;
-          default:
-            attendanceMatch = true;
-        }
-      }
-
-      return nameMatch && sectionMatch && statusMatch && yearMatch && instrumentMatch && lotMatch && attendanceMatch;
+      return nameMatch && sectionMatch && statusMatch && gradeMatch && instrumentMatch && lotMatch;
     });
 
     // Sort students
@@ -171,9 +148,9 @@ const StudentsScreen = ({ students, currentUser, onStudentUpdate, lots = [] }) =
           aVal = a.section || '';
           bVal = b.section || '';
           break;
-        case 'year':
-          aVal = a.year || '';
-          bVal = b.year || '';
+        case 'grade':
+          aVal = a.grade || '';
+          bVal = b.grade || '';
           break;
         case 'status':
           aVal = a.checkedIn ? 1 : 0;
@@ -191,10 +168,6 @@ const StudentsScreen = ({ students, currentUser, onStudentUpdate, lots = [] }) =
           aVal = calculateAttendanceMetrics(a).attended;
           bVal = calculateAttendanceMetrics(b).attended;
           break;
-        case 'excused':
-          aVal = calculateAttendanceMetrics(a).excused;
-          bVal = calculateAttendanceMetrics(b).excused;
-          break;
         default:
           return 0;
       }
@@ -205,7 +178,7 @@ const StudentsScreen = ({ students, currentUser, onStudentUpdate, lots = [] }) =
     });
 
     return filtered;
-  }, [students, searchTerm, sectionFilter, statusFilter, yearFilter, instrumentFilter, lotFilter, attendanceFilter, sortColumn, sortDirection, lots]);
+  }, [students, searchTerm, sectionFilter, statusFilter, gradeFilter, instrumentFilter, lotFilter, sortColumn, sortDirection, lots]);
 
   // Statistics
   const stats = useMemo(() => {
@@ -247,10 +220,9 @@ const StudentsScreen = ({ students, currentUser, onStudentUpdate, lots = [] }) =
     setSearchTerm("");
     setSectionFilter("all");
     setStatusFilter("all");
-    setYearFilter("all");
+    setGradeFilter("all");
     setInstrumentFilter("all");
     setLotFilter("all");
-    setAttendanceFilter("all");
   };
 
   const handleSort = (column) => {
@@ -290,7 +262,6 @@ const StudentsScreen = ({ students, currentUser, onStudentUpdate, lots = [] }) =
           onClick={() => {
             setStatusFilter("all");
             setLotFilter("all");
-            setAttendanceFilter("all");
           }}
           className="bg-blue-50 dark:bg-blue-900/30 p-4 rounded-lg text-center hover:bg-blue-100 dark:hover:bg-blue-900/50 transition-colors cursor-pointer"
         >
@@ -386,12 +357,12 @@ const StudentsScreen = ({ students, currentUser, onStudentUpdate, lots = [] }) =
           </select>
 
           <select
-            value={yearFilter}
-            onChange={e => setYearFilter(e.target.value)}
+            value={gradeFilter}
+            onChange={e => setGradeFilter(e.target.value)}
             className="px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 rounded-lg focus:ring-2 focus:ring-blue-500 dark:focus:ring-blue-400 focus:border-transparent"
           >
             <option value="all">All Years</option>
-            {years.map(y => <option key={y} value={y}>{y.charAt(0).toUpperCase() + y.slice(1)}</option>)}
+            {grades.map(g => <option key={g} value={g}>{g}</option>)}
           </select>
 
           <select
@@ -401,18 +372,6 @@ const StudentsScreen = ({ students, currentUser, onStudentUpdate, lots = [] }) =
           >
             <option value="all">All Lots</option>
             {lots.map(lot => <option key={lot.id} value={lot.id}>{lot.name}</option>)}
-          </select>
-
-          <select
-            value={attendanceFilter}
-            onChange={e => setAttendanceFilter(e.target.value)}
-            className="px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 rounded-lg focus:ring-2 focus:ring-blue-500 dark:focus:ring-blue-400 focus:border-transparent"
-          >
-            <option value="all">All Attendance</option>
-            <option value="perfect">Perfect (7/7)</option>
-            <option value="5+">5+ Events</option>
-            <option value="3+">3+ Events</option>
-            <option value="low">Less than 3</option>
           </select>
 
           <button
@@ -483,12 +442,12 @@ const StudentsScreen = ({ students, currentUser, onStudentUpdate, lots = [] }) =
                 </div>
               </th>
               <th
-                onClick={() => handleSort('year')}
+                onClick={() => handleSort('grade')}
                 className="px-4 py-3 text-left font-semibold text-gray-700 dark:text-gray-300 cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors hidden xl:table-cell"
               >
                 <div className="flex items-center gap-2">
                   <span>Year</span>
-                  {getSortIcon('year')}
+                  {getSortIcon('grade')}
                 </div>
               </th>
               <th
@@ -525,15 +484,6 @@ const StudentsScreen = ({ students, currentUser, onStudentUpdate, lots = [] }) =
                 <div className="flex items-center gap-2 justify-center">
                   <span>Events Attended</span>
                   {getSortIcon('attended')}
-                </div>
-              </th>
-              <th
-                onClick={() => handleSort('excused')}
-                className="px-4 py-3 text-center font-semibold text-gray-700 dark:text-gray-300 cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors hidden xl:table-cell"
-              >
-                <div className="flex items-center gap-2 justify-center">
-                  <span>Excused</span>
-                  {getSortIcon('excused')}
                 </div>
               </th>
               {canCheckIn && (
@@ -581,7 +531,7 @@ const StudentsScreen = ({ students, currentUser, onStudentUpdate, lots = [] }) =
 
                     {/* Year */}
                     <td className="px-4 py-3 text-gray-700 dark:text-gray-300 capitalize hidden xl:table-cell">
-                      {student.year || '-'}
+                      {student.grade || '-'}
                     </td>
 
                     {/* Status */}
@@ -646,17 +596,6 @@ const StudentsScreen = ({ students, currentUser, onStudentUpdate, lots = [] }) =
                         </span>
                         <span className="text-xs text-gray-500 dark:text-gray-400">/ 7</span>
                       </div>
-                    </td>
-
-                    {/* Excused */}
-                    <td className="px-4 py-3 text-center text-gray-700 dark:text-gray-300 hidden xl:table-cell">
-                      {attendanceMetrics.excused > 0 ? (
-                        <span className="inline-flex items-center px-2 py-1 bg-yellow-100 dark:bg-yellow-900/40 text-yellow-800 dark:text-yellow-300 text-xs rounded">
-                          {attendanceMetrics.excused}
-                        </span>
-                      ) : (
-                        <span className="text-gray-400 dark:text-gray-500">-</span>
-                      )}
                     </td>
 
                     {/* Action */}
