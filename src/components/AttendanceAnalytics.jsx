@@ -3,13 +3,37 @@
  * Displays attendance visualizations and statistics
  */
 
-import React, { useMemo } from 'react';
+import React, { useMemo, useEffect } from 'react';
 import { Users, TrendingUp, Award, BarChart3 } from 'lucide-react';
 import { motion } from 'framer-motion';
 
 const AttendanceAnalytics = ({ students }) => {
+  // Debug: Log students data
+  useEffect(() => {
+    console.log('=== ATTENDANCE ANALYTICS DEBUG ===');
+    console.log('Students received:', students);
+    console.log('Students count:', students?.length);
+    if (students && students.length > 0) {
+      console.log('First student:', students[0]);
+      console.log('Has event fields?', 'event1' in students[0]);
+    }
+  }, [students]);
+
   // Calculate attendance statistics
   const analytics = useMemo(() => {
+    // Safety check: ensure students array exists and has data
+    if (!students || students.length === 0) {
+      console.warn('AttendanceAnalytics: No students data available');
+      return {
+        eventAttendance: [],
+        instrumentComparison: [],
+        sectionComparison: [],
+        overallAttendanceRate: 0,
+        totalActualAttendances: 0,
+        totalPossibleAttendances: 0
+      };
+    }
+
     const eventFields = ['event1', 'event2', 'event3', 'event4', 'event5', 'event6', 'event7'];
 
     // Event-by-event attendance
@@ -110,6 +134,46 @@ const AttendanceAnalytics = ({ students }) => {
       totalPossibleAttendances
     };
   }, [students]);
+
+  // Safety check: Don't render if no data
+  if (!students || students.length === 0) {
+    return (
+      <div className="bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg p-6 text-center">
+        <p className="text-yellow-800 dark:text-yellow-200">
+          No student data available for analytics. Please ensure students are loaded.
+        </p>
+      </div>
+    );
+  }
+
+  // Check if attendance data exists
+  const hasAttendanceData = students.some(s =>
+    s.event1 !== undefined || s.event2 !== undefined || s.event3 !== undefined
+  );
+
+  if (!hasAttendanceData) {
+    return (
+      <div className="bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg p-6">
+        <h3 className="text-lg font-bold text-yellow-800 dark:text-yellow-200 mb-2">
+          ⚠️ Attendance Data Not Available
+        </h3>
+        <p className="text-yellow-700 dark:text-yellow-300 mb-4">
+          The attendance data (event1-event7 fields) is not present in the student records.
+          This usually means the Google Apps Script backend hasn't been updated yet.
+        </p>
+        <div className="bg-white dark:bg-gray-800 rounded p-4 text-sm text-gray-700 dark:text-gray-300">
+          <p className="font-semibold mb-2">To fix this:</p>
+          <ol className="list-decimal list-inside space-y-1">
+            <li>Open your Google Sheet</li>
+            <li>Go to Extensions → Apps Script</li>
+            <li>Replace Code.gs with the updated version from the repository</li>
+            <li>Deploy → Manage deployments → Edit → New version → Deploy</li>
+            <li>Refresh this page</li>
+          </ol>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <motion.div

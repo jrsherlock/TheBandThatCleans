@@ -4,7 +4,7 @@
  * Role-adaptive with permission-based controls
  */
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { Users, CheckCircle, Filter, Search, Clock, ArrowUpDown, ArrowUp, ArrowDown, X, TrendingUp, Award, BarChart3, ChevronDown, ChevronUp } from 'lucide-react';
 import { format, formatDistanceToNow } from 'date-fns';
 import { motion } from 'framer-motion';
@@ -72,6 +72,22 @@ const calculateAttendanceMetrics = (student) => {
  * Main Students Screen Component - Spreadsheet-Style Check-In Ledger
  */
 const StudentsScreen = ({ students, currentUser, onStudentUpdate, lots = [] }) => {
+  // Debug: Log student data to check for attendance fields
+  useEffect(() => {
+    if (students && students.length > 0) {
+      console.log('=== STUDENTS DATA DEBUG ===');
+      console.log('Total students:', students.length);
+      console.log('First student:', students[0]);
+      console.log('First student has event1?', 'event1' in students[0]);
+      console.log('First student event1 value:', students[0].event1);
+      console.log('Sample student object keys:', Object.keys(students[0]));
+
+      // Check attendance metrics
+      const metrics = calculateAttendanceMetrics(students[0]);
+      console.log('Calculated metrics for first student:', metrics);
+    }
+  }, [students]);
+
   const [searchTerm, setSearchTerm] = useState("");
   const [sectionFilter, setSectionFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState("all");
