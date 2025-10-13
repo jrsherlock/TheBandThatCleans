@@ -8,12 +8,16 @@ import { X, Upload, Camera, Loader2, CheckCircle, AlertTriangle, Edit2 } from 'l
 import { toast } from 'react-hot-toast';
 import { analyzeSignInSheet, isGeminiConfigured } from '../../services/geminiService';
 import { compressImage, validateImageFile, formatBytes } from '../../utils/imageCompression';
+import { hasExistingUpload, validateLotMatch } from '../../utils/lotMatching';
+import ReuploadWarningModal from './ReuploadWarningModal';
+import LotMismatchModal from './LotMismatchModal';
 
-const SignInSheetUploadModal = ({ 
-  lot, 
-  onClose, 
-  onSubmit, 
-  currentUser 
+const SignInSheetUploadModal = ({
+  lot,
+  onClose,
+  onSubmit,
+  currentUser,
+  availableLots = [] // All lots for mismatch detection
 }) => {
   const [selectedFile, setSelectedFile] = useState(null);
   const [previewUrl, setPreviewUrl] = useState(null);
@@ -23,10 +27,18 @@ const SignInSheetUploadModal = ({
   const [manualCount, setManualCount] = useState('');
   const [useManualEntry, setUseManualEntry] = useState(false);
   const [notes, setNotes] = useState('');
-  
+
+  // Validation states
+  const [showReuploadWarning, setShowReuploadWarning] = useState(false);
+  const [showLotMismatch, setShowLotMismatch] = useState(false);
+  const [lotValidation, setLotValidation] = useState(null);
+  const [bypassReuploadWarning, setBypassReuploadWarning] = useState(false);
+  const [bypassLotMismatch, setBypassLotMismatch] = useState(false);
+
   const fileInputRef = useRef(null);
 
   const geminiConfigured = isGeminiConfigured();
+  const hasExisting = hasExistingUpload(lot);
 
   // Handle file selection
   const handleFileSelect = async (event) => {
@@ -76,16 +88,33 @@ const SignInSheetUploadModal = ({
       return;
     }
 
+    // Check for re-upload (only if not already bypassed)
+    if (hasExisting && !bypassReuploadWarning) {
+      setShowReuploadWarning(true);
+      return;
+    }
+
     setIsAnalyzing(true);
-    
+
     try {
       toast.loading('Analyzing sign-in sheet with AI...', { id: 'analyze' });
-      
+
       const result = await analyzeSignInSheet(selectedFile, lot.name, lot.id);
-      
+
       toast.dismiss('analyze');
       setAiResult(result);
-      
+
+      // Validate lot match (only if not already bypassed)
+      if (!bypassLotMismatch) {
+        const validation = validateLotMatch(lot, result, availableLots);
+        setLotValidation(validation);
+
+        if (validation.shouldWarn) {
+          setShowLotMismatch(true);
+          return; // Don't show success toast yet
+        }
+      }
+
       // Show result notification
       if (result.confidence === 'high') {
         toast.success(`✅ Found ${result.count} students (High confidence)`);
@@ -98,7 +127,7 @@ const SignInSheetUploadModal = ({
           duration: 6000
         });
       }
-      
+
     } catch (error) {
       console.error('AI analysis error:', error);
       toast.dismiss('analyze');
@@ -107,6 +136,54 @@ const SignInSheetUploadModal = ({
     } finally {
       setIsAnalyzing(false);
     }
+  };
+
+  // Handle re-upload warning
+  const handleReuploadContinue = () => {
+    setShowReuploadWarning(false);
+    setBypassReuploadWarning(true);
+    // Trigger analysis again with bypass flag set
+    handleAnalyze();
+  };
+
+  const handleReuploadCancel = () => {
+    setShowReuploadWarning(false);
+    onClose();
+  };
+
+  // Handle lot mismatch
+  const handleLotMismatchContinue = () => {
+    setShowLotMismatch(false);
+    setBypassLotMismatch(true);
+
+    // Show success toast for the analysis
+    if (aiResult) {
+      if (aiResult.confidence === 'high') {
+        toast.success(`✅ Found ${aiResult.count} students (High confidence)`);
+      } else if (aiResult.confidence === 'medium') {
+        toast.success(`⚠️ Found ${aiResult.count} students (Medium confidence - please verify)`, {
+          duration: 5000
+        });
+      } else {
+        toast.error(`⚠️ Found ${aiResult.count} students (Low confidence - manual verification recommended)`, {
+          duration: 6000
+        });
+      }
+    }
+  };
+
+  const handleLotMismatchCancel = () => {
+    setShowLotMismatch(false);
+    setAiResult(null); // Clear AI result
+    toast.error('Upload cancelled due to lot mismatch');
+  };
+
+  const handleLotMismatchRedirect = (suggestedLot) => {
+    toast.info(`Redirecting to ${suggestedLot.name}...`);
+    setShowLotMismatch(false);
+    onClose();
+    // TODO: Parent component should handle opening upload modal for suggested lot
+    // This would require passing a callback from parent
   };
 
   // Handle form submission
@@ -393,6 +470,29 @@ const SignInSheetUploadModal = ({
           </button>
         </div>
       </div>
+
+      {/* Re-upload Warning Modal */}
+      {showReuploadWarning && (
+        <ReuploadWarningModal
+          lot={lot}
+          onContinue={handleReuploadContinue}
+          onCancel={handleReuploadCancel}
+        />
+      )}
+
+      {/* Lot Mismatch Modal */}
+      {showLotMismatch && lotValidation && (
+        <LotMismatchModal
+          expectedLot={lot}
+          detectedLot={lotValidation.detectedLot}
+          detectedZone={lotValidation.detectedZone}
+          confidence={lotValidation.confidence}
+          onContinueAnyway={handleLotMismatchContinue}
+          onCancel={handleLotMismatchCancel}
+          onRedirect={handleLotMismatchRedirect}
+          availableLots={availableLots}
+        />
+      )}
     </div>
   );
 };

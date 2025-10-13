@@ -1092,6 +1092,7 @@ const ParkingLotsScreen = ({
           onClose={handleCloseUploadModal}
           onSubmit={handleSignInSheetSubmit}
           currentUser={currentUser}
+          availableLots={lots}
         />
       )}
     </div>
