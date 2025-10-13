@@ -43,6 +43,11 @@ export const permissions = {
     return user?.role === USER_ROLES.ADMIN;
   },
 
+  canUploadSignInSheets: (user) => {
+    // Admins and volunteers can upload sign-in sheets with AI analysis
+    return user?.role === USER_ROLES.ADMIN || user?.role === USER_ROLES.VOLUNTEER;
+  },
+
   // Student Management Permissions
   canViewStudentRoster: (user) => {
     // Admins and volunteers can view student roster

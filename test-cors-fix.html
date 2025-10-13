@@ -1,0 +1,429 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TBTC CORS & Drive Upload Test</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 50px auto;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        .container {
+            background: white;
+            padding: 30px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #333;
+            border-bottom: 3px solid #4CAF50;
+            padding-bottom: 10px;
+        }
+        .test-section {
+            margin: 20px 0;
+            padding: 15px;
+            background: #f9f9f9;
+            border-left: 4px solid #2196F3;
+        }
+        button {
+            background: #4CAF50;
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            font-size: 16px;
+            border-radius: 4px;
+            cursor: pointer;
+            margin: 5px;
+        }
+        button:hover {
+            background: #45a049;
+        }
+        button:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+        }
+        .result {
+            margin-top: 15px;
+            padding: 15px;
+            border-radius: 4px;
+            font-family: monospace;
+            white-space: pre-wrap;
+            word-wrap: break-word;
+        }
+        .success {
+            background: #d4edda;
+            border: 1px solid #c3e6cb;
+            color: #155724;
+        }
+        .error {
+            background: #f8d7da;
+            border: 1px solid #f5c6cb;
+            color: #721c24;
+        }
+        .info {
+            background: #d1ecf1;
+            border: 1px solid #bee5eb;
+            color: #0c5460;
+        }
+        input[type="text"] {
+            width: 100%;
+            padding: 10px;
+            margin: 10px 0;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 14px;
+        }
+        .file-input {
+            margin: 10px 0;
+        }
+        img {
+            max-width: 100%;
+            margin-top: 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🧪 TBTC CORS & Drive Upload Test</h1>
+        
+        <div class="test-section">
+            <h2>Configuration</h2>
+            <label>
+                Google Apps Script URL:
+                <input
+                    type="text"
+                    id="apiUrl"
+                    placeholder="https://script.google.com/macros/s/YOUR_DEPLOYMENT_ID/exec"
+                    value="https://script.google.com/macros/s/AKfycbz2SI0ymIGtBgXRZeHunBDNqdyVUmDXUg7DVQNP7bLglkuCgI_enRF6BrBWihVnfgsU/exec"
+                />
+            </label>
+        </div>
+
+        <div class="test-section">
+            <h2>Test 1: GET Request (Baseline)</h2>
+            <p>Tests basic connectivity and CORS for GET requests</p>
+            <button onclick="testGetRequest()">Run GET Test</button>
+            <div id="getResult"></div>
+        </div>
+
+        <div class="test-section">
+            <h2>Test 2: POST Request (CORS Fix)</h2>
+            <p>Tests if CORS headers are properly set for POST requests</p>
+            <button onclick="testPostRequest()">Run POST Test</button>
+            <div id="postResult"></div>
+        </div>
+
+        <div class="test-section">
+            <h2>Test 3: Image Upload to Drive</h2>
+            <p>Tests uploading an image and storing it in Google Drive</p>
+            <button onclick="loadAvailableLots()">Show Available Lot IDs</button>
+            <div id="availableLots" style="margin: 10px 0; padding: 10px; background: #f0f0f0; border-radius: 4px; display: none;"></div>
+            <div class="file-input">
+                <input type="file" id="imageFile" accept="image/*" />
+            </div>
+            <label>
+                Lot ID:
+                <input type="text" id="lotId" placeholder="A1" value="A1" />
+                <small style="color: #666;">Use an existing lot ID from your spreadsheet (e.g., A1, B1, C1)</small>
+            </label>
+            <button onclick="testImageUpload()">Upload Image</button>
+            <div id="uploadResult"></div>
+        </div>
+
+        <div class="test-section">
+            <h2>Test 4: Fetch Lot Data</h2>
+            <p>Tests retrieving lot data with Drive URLs</p>
+            <button onclick="testFetchData()">Fetch Lot Data</button>
+            <div id="fetchResult"></div>
+        </div>
+    </div>
+
+    <script>
+        const API_KEY = 'tbtc-director-key-2024';
+
+        function getApiUrl() {
+            return document.getElementById('apiUrl').value.trim();
+        }
+
+        function showResult(elementId, message, type = 'info') {
+            const element = document.getElementById(elementId);
+            element.className = `result ${type}`;
+            element.textContent = message;
+        }
+
+        async function testGetRequest() {
+            showResult('getResult', 'Testing GET request...', 'info');
+            
+            try {
+                const url = `${getApiUrl()}?action=data&apiKey=${API_KEY}`;
+                const response = await fetch(url, {
+                    method: 'GET',
+                    redirect: 'follow'
+                });
+
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
+
+                const data = await response.json();
+                
+                showResult('getResult', 
+                    `✅ GET Request Successful!\n\n` +
+                    `Status: ${response.status}\n` +
+                    `Lots found: ${data.lots?.length || 0}\n` +
+                    `Students found: ${data.students?.length || 0}\n\n` +
+                    `CORS headers are working for GET requests!`,
+                    'success'
+                );
+            } catch (error) {
+                showResult('getResult', 
+                    `❌ GET Request Failed!\n\n` +
+                    `Error: ${error.message}\n\n` +
+                    `Check:\n` +
+                    `1. Is the URL correct?\n` +
+                    `2. Is the script deployed?\n` +
+                    `3. Check browser console for details`,
+                    'error'
+                );
+            }
+        }
+
+        async function testPostRequest() {
+            showResult('postResult', 'Testing POST request...', 'info');
+            
+            try {
+                const payload = {
+                    type: 'UPDATE_LOT_STATUS',
+                    lotId: 'TEST1',
+                    status: 'in-progress',
+                    apiKey: API_KEY
+                };
+
+                // Use URLSearchParams to avoid CORS preflight
+                const formData = new URLSearchParams();
+                formData.append('payload', JSON.stringify(payload));
+
+                const response = await fetch(getApiUrl(), {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/x-www-form-urlencoded'
+                    },
+                    body: formData.toString(),
+                    redirect: 'follow'
+                });
+
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
+
+                const data = await response.json();
+                
+                showResult('postResult', 
+                    `✅ POST Request Successful!\n\n` +
+                    `Status: ${response.status}\n` +
+                    `Response: ${JSON.stringify(data, null, 2)}\n\n` +
+                    `CORS is fixed! POST requests work!`,
+                    'success'
+                );
+            } catch (error) {
+                showResult('postResult', 
+                    `❌ POST Request Failed!\n\n` +
+                    `Error: ${error.message}\n\n` +
+                    `This means CORS headers are NOT set correctly.\n` +
+                    `Did you deploy the updated Code.gs?`,
+                    'error'
+                );
+            }
+        }
+
+        async function loadAvailableLots() {
+            const lotsDiv = document.getElementById('availableLots');
+            lotsDiv.style.display = 'block';
+            lotsDiv.innerHTML = 'Loading available lots...';
+
+            try {
+                const url = `${getApiUrl()}?action=data&apiKey=${API_KEY}`;
+                const response = await fetch(url, {
+                    method: 'GET',
+                    redirect: 'follow'
+                });
+
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
+
+                const data = await response.json();
+
+                if (data.lots && data.lots.length > 0) {
+                    const lotIds = data.lots.map(lot => lot.id).slice(0, 20); // Show first 20
+                    lotsDiv.innerHTML = `
+                        <strong>Available Lot IDs (click to use):</strong><br/>
+                        ${lotIds.map(id => `<button onclick="document.getElementById('lotId').value='${id}'; return false;" style="margin: 2px; padding: 5px 10px; cursor: pointer;">${id}</button>`).join('')}
+                        ${data.lots.length > 20 ? `<br/><small>...and ${data.lots.length - 20} more</small>` : ''}
+                    `;
+                } else {
+                    lotsDiv.innerHTML = '<span style="color: red;">No lots found in spreadsheet</span>';
+                }
+            } catch (error) {
+                lotsDiv.innerHTML = `<span style="color: red;">Failed to load lots: ${error.message}</span>`;
+            }
+        }
+
+        async function testImageUpload() {
+            const fileInput = document.getElementById('imageFile');
+            const lotId = document.getElementById('lotId').value.trim();
+
+            if (!fileInput.files || !fileInput.files[0]) {
+                showResult('uploadResult', '❌ Please select an image file first', 'error');
+                return;
+            }
+
+            if (!lotId) {
+                showResult('uploadResult', '❌ Please enter a Lot ID', 'error');
+                return;
+            }
+
+            showResult('uploadResult', 'Uploading image...', 'info');
+
+            try {
+                const file = fileInput.files[0];
+                
+                // Convert to base64
+                const base64 = await new Promise((resolve, reject) => {
+                    const reader = new FileReader();
+                    reader.onload = () => resolve(reader.result);
+                    reader.onerror = reject;
+                    reader.readAsDataURL(file);
+                });
+
+                const payload = {
+                    type: 'UPLOAD_SIGNIN_SHEET',
+                    lotId: lotId,
+                    imageData: base64,
+                    aiCount: 10,
+                    aiConfidence: 'high',
+                    countSource: 'ai',
+                    enteredBy: 'Test User',
+                    notes: 'Test upload from CORS test page',
+                    apiKey: API_KEY
+                };
+
+                const formData = new URLSearchParams();
+                formData.append('payload', JSON.stringify(payload));
+
+                const response = await fetch(getApiUrl(), {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/x-www-form-urlencoded'
+                    },
+                    body: formData.toString(),
+                    redirect: 'follow'
+                });
+
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
+
+                const data = await response.json();
+                
+                let resultHtml = `✅ Image Upload Successful!\n\n` +
+                    `Lot ID: ${data.lotId}\n` +
+                    `Student Count: ${data.studentCount}\n` +
+                    `Count Source: ${data.countSource}\n` +
+                    `Timestamp: ${data.timestamp}\n\n`;
+
+                if (data.imageUpload) {
+                    resultHtml += `📁 Drive Upload Info:\n` +
+                        `File ID: ${data.imageUpload.fileId}\n` +
+                        `File Name: ${data.imageUpload.fileName}\n` +
+                        `View URL: ${data.imageUpload.viewUrl}\n\n` +
+                        `Image is stored in Google Drive!`;
+                    
+                    // Display the uploaded image
+                    const img = document.createElement('img');
+                    img.src = data.imageUpload.viewUrl;
+                    img.alt = 'Uploaded image';
+                    
+                    const resultDiv = document.getElementById('uploadResult');
+                    showResult('uploadResult', resultHtml, 'success');
+                    resultDiv.appendChild(img);
+                } else {
+                    resultHtml += `⚠️ No Drive upload info in response.\n` +
+                        `Image may have been stored as base64 instead.`;
+                    showResult('uploadResult', resultHtml, 'success');
+                }
+            } catch (error) {
+                showResult('uploadResult', 
+                    `❌ Upload Failed!\n\n` +
+                    `Error: ${error.message}\n\n` +
+                    `Check:\n` +
+                    `1. CORS headers are set\n` +
+                    `2. Drive permissions are granted\n` +
+                    `3. Backend is deployed with Drive integration`,
+                    'error'
+                );
+            }
+        }
+
+        async function testFetchData() {
+            showResult('fetchResult', 'Fetching lot data...', 'info');
+            
+            try {
+                const url = `${getApiUrl()}?action=data&apiKey=${API_KEY}`;
+                const response = await fetch(url, {
+                    method: 'GET',
+                    redirect: 'follow'
+                });
+
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
+
+                const data = await response.json();
+                
+                let resultHtml = `✅ Data Fetched Successfully!\n\n`;
+                
+                if (data.lots && data.lots.length > 0) {
+                    resultHtml += `Found ${data.lots.length} lots\n\n`;
+                    
+                    // Find lots with images
+                    const lotsWithImages = data.lots.filter(lot => 
+                        lot.signUpSheetPhoto && 
+                        lot.signUpSheetPhoto.startsWith('https://')
+                    );
+                    
+                    if (lotsWithImages.length > 0) {
+                        resultHtml += `Lots with Drive images: ${lotsWithImages.length}\n\n`;
+                        
+                        lotsWithImages.forEach(lot => {
+                            resultHtml += `Lot ${lot.id}:\n` +
+                                `  Image URL: ${lot.signUpSheetPhoto}\n` +
+                                `  Students: ${lot.aiStudentCount || 'N/A'}\n\n`;
+                        });
+                    } else {
+                        resultHtml += `No lots have Drive image URLs yet.\n` +
+                            `Upload an image to test Drive storage.`;
+                    }
+                } else {
+                    resultHtml += `No lots found in the spreadsheet.`;
+                }
+                
+                showResult('fetchResult', resultHtml, 'success');
+            } catch (error) {
+                showResult('fetchResult', 
+                    `❌ Fetch Failed!\n\n` +
+                    `Error: ${error.message}`,
+                    'error'
+                );
+            }
+        }
+    </script>
+</body>
+</html>
+

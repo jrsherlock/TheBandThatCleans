@@ -531,8 +531,14 @@ const App = () => {
     const totalLots = lots.length;
     const completedLots = lots.filter(l => l.status === 'complete').length;
 
-    // Sum of all students signed up across all lots (from Google Sheet sign-up data)
-    const totalStudentsSignedUp = lots.reduce((acc, l) => acc + (l.totalStudentsSignedUp || 0), 0);
+    // Sum of all students - prioritize AI counts when available
+    // Use aiStudentCount if available, otherwise fall back to totalStudentsSignedUp
+    const totalStudentsSignedUp = lots.reduce((acc, l) => {
+      const count = l.aiStudentCount !== undefined && l.aiStudentCount !== null && l.aiStudentCount !== ''
+        ? parseInt(l.aiStudentCount) || 0
+        : (l.totalStudentsSignedUp || 0);
+      return acc + count;
+    }, 0);
 
     // Total roster size (hardcoded to 246 for now)
     const totalRosterSize = 246;
@@ -540,7 +546,7 @@ const App = () => {
     return {
       totalLots,
       completedLots,
-      studentsPresent: totalStudentsSignedUp, // Show sum of lot sign-ups
+      studentsPresent: totalStudentsSignedUp, // Show sum of lot sign-ups (AI-verified when available)
       totalStudents: totalRosterSize, // Total roster size
       totalStudentsSignedUp,
     };
@@ -622,6 +628,135 @@ const App = () => {
       );
 
       toast.error(error.message || 'Failed to update lot details');
+    } finally {
+      setOperationLoading(false);
+    }
+  };
+
+  // Handler for AI-assisted sign-in sheet upload
+  const handleSignInSheetUpload = async (submissionData) => {
+    const { lotId, count, countSource, confidence, notes, enteredBy, imageFile, aiAnalysis } = submissionData;
+
+    const originalLot = lots.find(l => l.id === lotId);
+    if (!originalLot) {
+      throw new Error('Lot not found');
+    }
+
+    try {
+      setOperationLoading(true);
+
+      // Convert image to base64 if provided
+      let imageData = null;
+      if (imageFile) {
+        const reader = new FileReader();
+        imageData = await new Promise((resolve, reject) => {
+          reader.onload = (e) => resolve(e.target.result);
+          reader.onerror = reject;
+          reader.readAsDataURL(imageFile);
+        });
+      }
+
+      // Prepare payload for backend
+      const payload = {
+        lotId,
+        countSource,
+        enteredBy: enteredBy || currentUser.name,
+        notes: notes || '',
+        imageData
+      };
+
+      // Add AI count or manual count based on source
+      if (countSource === 'ai' && aiAnalysis) {
+        payload.aiCount = count;
+        payload.aiConfidence = confidence || aiAnalysis.confidence;
+
+        // Include extracted student names if available
+        if (aiAnalysis.studentNames && Array.isArray(aiAnalysis.studentNames)) {
+          payload.studentNames = aiAnalysis.studentNames;
+        }
+
+        // Include illegible names if available
+        if (aiAnalysis.illegibleNames && Array.isArray(aiAnalysis.illegibleNames)) {
+          payload.illegibleNames = aiAnalysis.illegibleNames;
+        }
+
+        // If user manually overrode the AI count, include both
+        if (aiAnalysis.count !== count) {
+          payload.manualCount = count;
+        }
+      } else {
+        payload.manualCount = count;
+      }
+
+      // Optimistic update - update the lot with new student count
+      setLots(prevLots =>
+        prevLots.map(lot =>
+          lot.id === lotId
+            ? {
+                ...lot,
+                aiStudentCount: count,
+                aiConfidence: confidence || 'manual',
+                countSource,
+                countEnteredBy: enteredBy || currentUser.name,
+                lastUpdated: new Date(),
+                updatedBy: enteredBy || currentUser.name
+              }
+            : lot
+        )
+      );
+
+      // API call
+      const response = await apiService.uploadSignInSheet(payload);
+
+      // Show success message with student matching info if available
+      if (response.studentMatching && response.studentMatching.matched > 0) {
+        const matchRate = Math.round(response.studentMatching.matchRate);
+        toast.success(
+          `✅ ${originalLot.name}: ${count} students recorded\n` +
+          `📋 Matched ${response.studentMatching.matched} students (${matchRate}% match rate)`,
+          {
+            duration: 5000,
+            icon: '🤖'
+          }
+        );
+
+        // Show info message if there are unmatched names
+        if (response.studentMatching.unmatched > 0) {
+          toast(
+            `ℹ️ ${response.studentMatching.unmatched} name(s) added as "Band Student" - please review and update`,
+            {
+              duration: 7000,
+              icon: 'ℹ️',
+              style: {
+                background: '#3b82f6',
+                color: '#fff',
+              }
+            }
+          );
+        }
+      } else {
+        toast.success(`✅ ${originalLot.name}: ${count} students recorded`, {
+          duration: 4000,
+          icon: countSource === 'ai' ? '🤖' : '✍️'
+        });
+      }
+
+      // Trigger a manual refresh to get the latest data from backend
+      setTimeout(() => {
+        manualRefresh();
+      }, 500);
+
+      return response;
+
+    } catch (error) {
+      console.error('Failed to upload sign-in sheet:', error);
+
+      // Revert optimistic update on error
+      setLots(prevLots =>
+        prevLots.map(lot => lot.id === lotId ? originalLot : lot)
+      );
+
+      throw error; // Re-throw to let modal handle the error
     } finally {
       setOperationLoading(false);
     }
@@ -912,6 +1047,7 @@ const App = () => {
         currentUser={currentUser}
         onLotStatusUpdate={handleLotStatusUpdate}
         onLotDetailsUpdate={handleLotDetailsUpdate}
+        onSignInSheetUpload={handleSignInSheetUpload}
         getStatusStyles={getStatusStyles}
         statuses={statuses}
         sections={sections}

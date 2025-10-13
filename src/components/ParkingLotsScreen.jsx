@@ -7,7 +7,8 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import {
   Users, MapPin, AlertTriangle, MessageSquare, Clock, PenLine, Filter, CheckCircle, Play,
-  Grid3x3, List, Map as MapIcon, ArrowUpDown, Navigation, ExternalLink
+  Grid3x3, List, Map as MapIcon, ArrowUpDown, Navigation, ExternalLink, Upload, FileImage,
+  Sparkles, UserCheck
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -15,6 +16,7 @@ import { hasPermission } from '../utils/permissions.js';
 import { isReadOnly } from '../utils/roleHelpers.jsx';
 import { ProtectedButton, ProtectedSelect } from './ProtectedComponents.jsx';
 import LotEditModal from './LotEditModal.jsx';
+import SignInSheetUploadModal from './SignInSheetUpload/SignInSheetUploadModal.jsx';
 
 const MotionDiv = motion.div;
 
@@ -101,13 +103,14 @@ const getStatusCardColors = (status) => {
 /**
  * Enhanced LotCard with improved visual design and status indicators
  */
-const LotCard = ({ lot, students, currentUser, onStatusChange, onEditClick, getStatusStyles, statuses, StatusBadge }) => {
+const LotCard = ({ lot, students, currentUser, onStatusChange, onEditClick, onUploadClick, getStatusStyles, statuses, StatusBadge }) => {
   const assignedStudents = students.filter(s => (lot.assignedStudents || []).includes(s.id));
   const studentsPresent = assignedStudents.filter(s => s.checkedIn);
   const lotStatusOptions = statuses.filter(s => s !== lot.status);
 
   const canEdit = hasPermission(currentUser, 'canEditLotStatus');
   const canEditDetails = hasPermission(currentUser, 'canEditLotDetails');
+  const canUploadSignInSheets = hasPermission(currentUser, 'canUploadSignInSheets');
 
   // Get status-specific colors
   const statusColors = getStatusCardColors(lot.status);
@@ -133,13 +136,50 @@ const LotCard = ({ lot, students, currentUser, onStatusChange, onEditClick, getS
 
       {/* Lot Details */}
       <div className="space-y-2 mb-4">
-        {/* Attendance Info - Shows count from Google Sheet sign-up data */}
-        <div className="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300">
-          <Users size={16} className="text-gray-500 dark:text-gray-400 flex-shrink-0" />
-          <span className="font-medium">
-            {lot.totalStudentsSignedUp || 0} {(lot.totalStudentsSignedUp || 0) === 1 ? 'student' : 'students'} signed up
-          </span>
-        </div>
+        {/* Attendance Info - Shows AI-verified count when available */}
+        {(() => {
+          const hasAICount = lot.aiStudentCount !== undefined && lot.aiStudentCount !== null && lot.aiStudentCount !== '';
+          const aiCount = hasAICount ? parseInt(lot.aiStudentCount) || 0 : null;
+          const manualCount = lot.totalStudentsSignedUp || 0;
+          const displayCount = hasAICount ? aiCount : manualCount;
+          const countSource = lot.countSource || (hasAICount ? 'ai' : 'manual');
+          const confidence = lot.aiConfidence || '';
+
+          return (
+            <div className="space-y-1">
+              <div className="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300">
+                {hasAICount ? (
+                  <Sparkles size={16} className="text-purple-500 dark:text-purple-400 flex-shrink-0" />
+                ) : (
+                  <Users size={16} className="text-gray-500 dark:text-gray-400 flex-shrink-0" />
+                )}
+                <span className="font-medium">
+                  {displayCount} {displayCount === 1 ? 'student' : 'students'}
+                </span>
+                {hasAICount && (
+                  <span className="text-xs px-2 py-0.5 rounded-full bg-purple-100 dark:bg-purple-900/40 text-purple-700 dark:text-purple-300 font-medium">
+                    AI Verified
+                  </span>
+                )}
+              </div>
+
+              {/* Show both counts if they differ significantly */}
+              {hasAICount && manualCount > 0 && Math.abs(aiCount - manualCount) > 0 && (
+                <div className="flex items-center gap-2 text-xs text-gray-500 dark:text-gray-400 ml-6">
+                  <UserCheck size={12} />
+                  <span>Manual sign-up: {manualCount}</span>
+                </div>
+              )}
+
+              {/* Show confidence level if available */}
+              {hasAICount && confidence && confidence !== 'manual' && (
+                <div className="text-xs text-gray-500 dark:text-gray-400 ml-6">
+                  Confidence: <span className="capitalize">{confidence}</span>
+                </div>
+              )}
+            </div>
+          );
+        })()}
 
         {/* Zone Info */}
         <div className="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300">
@@ -204,6 +244,37 @@ const LotCard = ({ lot, students, currentUser, onStatusChange, onEditClick, getS
         </div>
       )}
 
+      {/* Upload Sign-In Sheet Button - For admins and volunteers */}
+      {canUploadSignInSheets && onUploadClick && (
+        <div className="mb-4">
+          <button
+            onClick={() => onUploadClick(lot.id)}
+            aria-label={`Upload sign-in sheet for ${lot.name}`}
+            className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-green-100 dark:bg-green-900/40 text-green-700 dark:text-green-300 rounded-lg hover:bg-green-200 dark:hover:bg-green-900/60 transition-all duration-200 hover:-translate-y-0.5 active:translate-y-0 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 dark:focus:ring-green-400 min-h-[44px]"
+          >
+            <Upload size={16} aria-hidden="true" />
+            <span className="text-sm font-medium">Upload Sign-In Sheet</span>
+          </button>
+        </div>
+      )}
+
+      {/* View Sign-In Sheet Button - For admins and volunteers when image exists */}
+      {(canEdit || canUploadSignInSheets) && lot.signUpSheetPhoto && lot.signUpSheetPhoto.trim() !== '' && (
+        <div className="mb-4">
+          <a
+            href={lot.signUpSheetPhoto}
+            target="_blank"
+            rel="noopener noreferrer"
+            aria-label={`View sign-in sheet for ${lot.name}`}
+            className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300 rounded-lg hover:bg-blue-200 dark:hover:bg-blue-900/60 transition-all duration-200 hover:-translate-y-0.5 active:translate-y-0 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 dark:focus:ring-blue-400 min-h-[44px]"
+          >
+            <FileImage size={16} aria-hidden="true" />
+            <span className="text-sm font-medium">View Sign-In Sheet</span>
+            <ExternalLink size={14} aria-hidden="true" />
+          </a>
+        </div>
+      )}
+
       {/* Edit Button - Only for admins */}
       {canEditDetails && onEditClick && (
         <div className="mb-4">
@@ -218,8 +289,8 @@ const LotCard = ({ lot, students, currentUser, onStatusChange, onEditClick, getS
         </div>
       )}
 
-      {/* Read-only indicator for non-admins */}
-      {!canEdit && (
+      {/* Read-only indicator for students */}
+      {!canEdit && !canUploadSignInSheets && (
         <div className="mb-4 text-center">
           <span className="inline-flex items-center px-3 py-1.5 text-xs font-medium bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-full">
             Read Only
@@ -376,10 +447,28 @@ const LotListView = ({ lots, students, currentUser, onStatusChange, onEditClick,
                     <span className="capitalize text-gray-700 dark:text-gray-300">{lot.zone || lot.section}</span>
                   </td>
                   <td className="px-4 py-3">
-                    <div className="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300">
-                      <Users size={14} className="text-gray-500 dark:text-gray-400" />
-                      <span>{lot.totalStudentsSignedUp || 0}</span>
-                    </div>
+                    {(() => {
+                      const hasAICount = lot.aiStudentCount !== undefined && lot.aiStudentCount !== null && lot.aiStudentCount !== '';
+                      const aiCount = hasAICount ? parseInt(lot.aiStudentCount) || 0 : null;
+                      const manualCount = lot.totalStudentsSignedUp || 0;
+                      const displayCount = hasAICount ? aiCount : manualCount;
+
+                      return (
+                        <div className="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300">
+                          {hasAICount ? (
+                            <Sparkles size={14} className="text-purple-500 dark:text-purple-400" />
+                          ) : (
+                            <Users size={14} className="text-gray-500 dark:text-gray-400" />
+                          )}
+                          <span>{displayCount}</span>
+                          {hasAICount && (
+                            <span className="text-xs px-1.5 py-0.5 rounded bg-purple-100 dark:bg-purple-900/40 text-purple-700 dark:text-purple-300">
+                              AI
+                            </span>
+                          )}
+                        </div>
+                      );
+                    })()}
                   </td>
                   <td className="px-4 py-3 text-sm text-gray-600 dark:text-gray-400">
                     {lot.lastUpdated ? format(lot.lastUpdated, 'HH:mm') : 'N/A'}
@@ -430,10 +519,28 @@ const LotListView = ({ lots, students, currentUser, onStatusChange, onEditClick,
                   <MapPin size={14} className="text-gray-500 dark:text-gray-400" />
                   <span className="capitalize">{lot.zone || lot.section}</span>
                 </div>
-                <div className="flex items-center gap-2 text-gray-700 dark:text-gray-300">
-                  <Users size={14} className="text-gray-500 dark:text-gray-400" />
-                  <span>{lot.totalStudentsSignedUp || 0} {(lot.totalStudentsSignedUp || 0) === 1 ? 'student' : 'students'} signed up</span>
-                </div>
+                {(() => {
+                  const hasAICount = lot.aiStudentCount !== undefined && lot.aiStudentCount !== null && lot.aiStudentCount !== '';
+                  const aiCount = hasAICount ? parseInt(lot.aiStudentCount) || 0 : null;
+                  const manualCount = lot.totalStudentsSignedUp || 0;
+                  const displayCount = hasAICount ? aiCount : manualCount;
+
+                  return (
+                    <div className="flex items-center gap-2 text-gray-700 dark:text-gray-300">
+                      {hasAICount ? (
+                        <Sparkles size={14} className="text-purple-500 dark:text-purple-400" />
+                      ) : (
+                        <Users size={14} className="text-gray-500 dark:text-gray-400" />
+                      )}
+                      <span>{displayCount} {displayCount === 1 ? 'student' : 'students'}</span>
+                      {hasAICount && (
+                        <span className="text-xs px-1.5 py-0.5 rounded bg-purple-100 dark:bg-purple-900/40 text-purple-700 dark:text-purple-300">
+                          AI
+                        </span>
+                      )}
+                    </div>
+                  );
+                })()}
                 <div className="flex items-center gap-2 text-gray-600 dark:text-gray-400">
                   <Clock size={14} />
                   <span>Updated: {lot.lastUpdated ? format(lot.lastUpdated, 'HH:mm') : 'N/A'}</span>
@@ -604,10 +711,28 @@ const LotMapView = ({ lots, students, currentUser, onStatusChange, getStatusStyl
                   <StatusBadge status={lot.status} size="sm" />
                 </div>
 
-                <div className="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300 mb-3">
-                  <Users size={14} className="text-gray-500 dark:text-gray-400" />
-                  <span>{lot.totalStudentsSignedUp || 0} {(lot.totalStudentsSignedUp || 0) === 1 ? 'student' : 'students'} signed up</span>
-                </div>
+                {(() => {
+                  const hasAICount = lot.aiStudentCount !== undefined && lot.aiStudentCount !== null && lot.aiStudentCount !== '';
+                  const aiCount = hasAICount ? parseInt(lot.aiStudentCount) || 0 : null;
+                  const manualCount = lot.totalStudentsSignedUp || 0;
+                  const displayCount = hasAICount ? aiCount : manualCount;
+
+                  return (
+                    <div className="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300 mb-3">
+                      {hasAICount ? (
+                        <Sparkles size={14} className="text-purple-500 dark:text-purple-400" />
+                      ) : (
+                        <Users size={14} className="text-gray-500 dark:text-gray-400" />
+                      )}
+                      <span>{displayCount} {displayCount === 1 ? 'student' : 'students'}</span>
+                      {hasAICount && (
+                        <span className="text-xs px-1.5 py-0.5 rounded bg-purple-100 dark:bg-purple-900/40 text-purple-700 dark:text-purple-300">
+                          AI
+                        </span>
+                      )}
+                    </div>
+                  );
+                })()}
 
                 <button
                   onClick={() => getDirections(lot)}
@@ -635,6 +760,7 @@ const ParkingLotsScreen = ({
   currentUser,
   onLotStatusUpdate,
   onLotDetailsUpdate,
+  onSignInSheetUpload,
   getStatusStyles,
   statuses,
   sections,
@@ -647,6 +773,7 @@ const ParkingLotsScreen = ({
   });
 
   const [selectedLotId, setSelectedLotId] = useState(null);
+  const [uploadLotId, setUploadLotId] = useState(null);
   const [sectionFilter, setSectionFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState("all");
   const [priorityFilter, setPriorityFilter] = useState("all");
@@ -672,6 +799,7 @@ const ParkingLotsScreen = ({
   }, [lots, sectionFilter, statusFilter, priorityFilter]);
 
   const lotToEdit = lots.find(l => l.id === selectedLotId);
+  const lotToUpload = lots.find(l => l.id === uploadLotId);
 
   const handleEditClick = (lotId) => {
     if (canEditDetails) {
@@ -679,8 +807,16 @@ const ParkingLotsScreen = ({
     }
   };
 
+  const handleUploadClick = (lotId) => {
+    setUploadLotId(lotId);
+  };
+
   const handleCloseModal = () => {
     setSelectedLotId(null);
+  };
+
+  const handleCloseUploadModal = () => {
+    setUploadLotId(null);
   };
 
   const handleSaveLot = (lotId, updates) => {
@@ -690,6 +826,11 @@ const ParkingLotsScreen = ({
 
   const handlePhotoUpload = (lotId, photoData) => {
     onLotDetailsUpdate(lotId, { signUpSheetPhoto: photoData });
+  };
+
+  const handleSignInSheetSubmit = async (submissionData) => {
+    await onSignInSheetUpload(submissionData);
+    setUploadLotId(null);
   };
 
   return (
@@ -865,6 +1006,7 @@ const ParkingLotsScreen = ({
                   currentUser={currentUser}
                   onStatusChange={canEdit ? onLotStatusUpdate : null}
                   onEditClick={canEditDetails ? handleEditClick : null}
+                  onUploadClick={handleUploadClick}
                   getStatusStyles={getStatusStyles}
                   statuses={statuses}
                   StatusBadge={StatusBadge}
@@ -935,6 +1077,16 @@ const ParkingLotsScreen = ({
           onClose={handleCloseModal}
           onSave={handleSaveLot}
           onPhotoUpload={handlePhotoUpload}
+        />
+      )}
+
+      {/* Sign-In Sheet Upload Modal - For admins and volunteers */}
+      {lotToUpload && (
+        <SignInSheetUploadModal
+          lot={lotToUpload}
+          onClose={handleCloseUploadModal}
+          onSubmit={handleSignInSheetSubmit}
+          currentUser={currentUser}
         />
       )}
     </div>

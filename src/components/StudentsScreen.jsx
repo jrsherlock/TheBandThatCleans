@@ -51,7 +51,7 @@ const StudentCard = ({ student, currentUser, onCheckIn }) => {
         </div>
         <div className="grid grid-cols-2 gap-2 text-sm text-gray-600 dark:text-gray-400">
           <div>{student.instrument} • {student.section}</div>
-          <div className="capitalize">{student.year}</div>
+          <div className="capitalize">{student.year || 'Unknown'}</div>
           {student.checkInTime && (
             <div className="flex items-center gap-1">
               <Clock size={12} />
@@ -101,7 +101,14 @@ const StudentsScreen = ({ students, currentUser, onStudentUpdate }) => {
 
   // Get unique sections and years
   const sections = useMemo(() => Array.from(new Set(students.map(s => s.section))), [students]);
-  const years = useMemo(() => Array.from(new Set(students.map(s => s.year))), [students]);
+  const years = useMemo(() => {
+    // Filter out empty/null/undefined years and ensure all are strings
+    const validYears = students
+      .map(s => s.year)
+      .filter(y => y !== null && y !== undefined && y !== '')
+      .map(y => String(y)); // Ensure all are strings
+    return Array.from(new Set(validYears));
+  }, [students]);
 
   // Filtered students
   const filteredStudents = useMemo(() => {
