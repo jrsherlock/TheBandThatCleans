@@ -53,10 +53,14 @@ const calculateAttendanceMetrics = (student) => {
     if (value === 'X' || value === 'x') {
       attended++;
       eventDetails.push({ event: index + 1, status: 'attended' });
-    } else if (value === 'EX' || value === 'ex') {
+    } else if (value === 'EX' || value === 'ex' || value === 'Ex') {
       excused++;
       eventDetails.push({ event: index + 1, status: 'excused' });
+    } else if (value) {
+      // Any other non-empty value is considered absent
+      eventDetails.push({ event: index + 1, status: 'absent' });
     } else {
+      // Empty/null value is also absent
       eventDetails.push({ event: index + 1, status: 'absent' });
     }
   });

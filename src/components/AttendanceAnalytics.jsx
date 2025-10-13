@@ -11,35 +11,66 @@ const AttendanceAnalytics = ({ students }) => {
   // Calculate attendance statistics
   const analytics = useMemo(() => {
     const eventFields = ['event1', 'event2', 'event3', 'event4', 'event5', 'event6', 'event7'];
-    
+
     // Event-by-event attendance
     const eventAttendance = eventFields.map((field, index) => {
-      const attended = students.filter(s => s[field] === 'X' || s[field] === 'x').length;
-      const excused = students.filter(s => s[field] === 'EX' || s[field] === 'ex').length;
+      const attended = students.filter(s => {
+        const val = s[field];
+        return val === 'X' || val === 'x';
+      }).length;
+      const excused = students.filter(s => {
+        const val = s[field];
+        return val === 'EX' || val === 'ex' || val === 'Ex';
+      }).length;
+      const total = students.length;
+      const eligible = total - excused; // Exclude excused students from denominator
       return {
         event: index + 1,
         attended,
         excused,
-        total: students.length,
-        percentage: students.length > 0 ? Math.round((attended / students.length) * 100) : 0
+        total,
+        eligible,
+        percentage: eligible > 0 ? Math.round((attended / eligible) * 100) : 0
       };
     });
 
-    // Student leaderboard
-    const studentStats = students.map(s => {
-      let attended = 0;
-      let excused = 0;
+    // Instrument comparison - Competition to see which instrument has highest attendance
+    const instrumentStats = {};
+    students.forEach(s => {
+      const instrument = s.instrument || 'Unknown';
+      if (!instrumentStats[instrument]) {
+        instrumentStats[instrument] = {
+          totalStudents: 0,
+          totalAttended: 0,
+          totalEligible: 0
+        };
+      }
+      instrumentStats[instrument].totalStudents++;
+
       eventFields.forEach(field => {
         const value = s[field];
-        if (value === 'X' || value === 'x') attended++;
-        else if (value === 'EX' || value === 'ex') excused++;
+        if (value === 'X' || value === 'x') {
+          instrumentStats[instrument].totalAttended++;
+          instrumentStats[instrument].totalEligible++;
+        } else if (value === 'EX' || value === 'ex' || value === 'Ex') {
+          // Excused - don't count as attended, but also don't count against them
+          // Do nothing - this event doesn't count for or against
+        } else {
+          // Absent - counts against them
+          instrumentStats[instrument].totalEligible++;
+        }
       });
-      return { ...s, attended, excused };
     });
-    
-    const topStudents = studentStats
-      .sort((a, b) => b.attended - a.attended)
-      .slice(0, 10);
+
+    const instrumentComparison = Object.entries(instrumentStats).map(([instrument, stats]) => ({
+      instrument,
+      avgAttendance: stats.totalEligible > 0
+        ? ((stats.totalAttended / stats.totalEligible) * 100).toFixed(1)
+        : 0,
+      totalStudents: stats.totalStudents,
+      totalAttended: stats.totalAttended,
+      totalEligible: stats.totalEligible
+    })).sort((a, b) => b.avgAttendance - a.avgAttendance);
 
     // Section comparison
     const sectionStats = {};
@@ -72,7 +103,7 @@ const AttendanceAnalytics = ({ students }) => {
 
     return {
       eventAttendance,
-      topStudents,
+      instrumentComparison,
       sectionComparison,
       overallAttendanceRate,
       totalActualAttendances,
@@ -130,7 +161,12 @@ const AttendanceAnalytics = ({ students }) => {
                     Event {event.event}
                   </span>
                   <span className="text-gray-600 dark:text-gray-400">
-                    {event.attended} / {event.total} ({event.percentage}%)
+                    {event.attended} / {event.eligible} ({event.percentage}%)
+                    {event.excused > 0 && (
+                      <span className="ml-2 text-xs text-yellow-600 dark:text-yellow-400">
+                        ({event.excused} excused)
+                      </span>
+                    )}
                   </span>
                 </div>
                 <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2">
@@ -144,51 +180,79 @@ const AttendanceAnalytics = ({ students }) => {
           </div>
         </div>
 
-        {/* Student Leaderboard */}
+        {/* Instrument Competition - Which instrument has the highest attendance? */}
         <div className="bg-white dark:bg-gray-800 p-6 rounded-lg border border-gray-200 dark:border-gray-700">
           <h3 className="text-lg font-bold text-gray-900 dark:text-white mb-4 flex items-center gap-2">
             <Award size={20} />
-            Top 10 Students by Attendance
+            Attendance by Instrument - Competition Rankings
           </h3>
-          <div className="space-y-2">
-            {analytics.topStudents.map((student, index) => (
+          <div className="space-y-3">
+            {analytics.instrumentComparison.map((instrument, index) => (
               <div
-                key={student.id}
-                className="flex items-center justify-between p-2 rounded hover:bg-gray-50 dark:hover:bg-gray-700/50"
+                key={instrument.instrument}
+                className="space-y-1"
               >
-                <div className="flex items-center gap-3">
-                  <span className={`
-                    w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold
-                    ${index === 0 
-                      ? 'bg-yellow-400 text-yellow-900' 
-                      : index === 1 
-                        ? 'bg-gray-300 text-gray-700' 
-                        : index === 2 
-                          ? 'bg-orange-400 text-orange-900' 
-                          : 'bg-gray-200 dark:bg-gray-700 text-gray-600 dark:text-gray-400'
-                    }
-                  `}>
-                    {index + 1}
-                  </span>
-                  <span className="text-sm font-medium text-gray-900 dark:text-white">
-                    {student.name}
-                  </span>
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <span className={`
+                      w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold
+                      ${index === 0
+                        ? 'bg-yellow-400 text-yellow-900'
+                        : index === 1
+                          ? 'bg-gray-300 text-gray-700'
+                          : index === 2
+                            ? 'bg-orange-400 text-orange-900'
+                            : 'bg-gray-200 dark:bg-gray-700 text-gray-600 dark:text-gray-400'
+                      }
+                    `}>
+                      {index + 1}
+                    </span>
+                    <div>
+                      <div className="text-sm font-bold text-gray-900 dark:text-white">
+                        {instrument.instrument}
+                      </div>
+                      <div className="text-xs text-gray-500 dark:text-gray-400">
+                        {instrument.totalStudents} student{instrument.totalStudents !== 1 ? 's' : ''}
+                      </div>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <div className="text-right">
+                      <div className={`
+                        text-lg font-bold
+                        ${parseFloat(instrument.avgAttendance) >= 85
+                          ? 'text-green-600 dark:text-green-400'
+                          : parseFloat(instrument.avgAttendance) >= 70
+                            ? 'text-blue-600 dark:text-blue-400'
+                            : parseFloat(instrument.avgAttendance) >= 50
+                              ? 'text-yellow-600 dark:text-yellow-400'
+                              : 'text-red-600 dark:text-red-400'
+                        }
+                      `}>
+                        {instrument.avgAttendance}%
+                      </div>
+                      <div className="text-xs text-gray-500 dark:text-gray-400">
+                        {instrument.totalAttended}/{instrument.totalEligible}
+                      </div>
+                    </div>
+                    {index === 0 && (
+                      <Award size={20} className="text-yellow-500" />
+                    )}
+                  </div>
                 </div>
-                <div className="flex items-center gap-2">
-                  <span className={`
-                    text-sm font-bold
-                    ${student.attended === 7 
-                      ? 'text-green-600 dark:text-green-400' 
-                      : student.attended >= 5 
-                        ? 'text-blue-600 dark:text-blue-400' 
-                        : 'text-gray-600 dark:text-gray-400'
-                    }
-                  `}>
-                    {student.attended}/7
-                  </span>
-                  {student.attended === 7 && (
-                    <Award size={16} className="text-yellow-500" />
-                  )}
+                <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2">
+                  <div
+                    className={`h-2 rounded-full transition-all ${
+                      parseFloat(instrument.avgAttendance) >= 85
+                        ? 'bg-green-600 dark:bg-green-500'
+                        : parseFloat(instrument.avgAttendance) >= 70
+                          ? 'bg-blue-600 dark:bg-blue-500'
+                          : parseFloat(instrument.avgAttendance) >= 50
+                            ? 'bg-yellow-600 dark:bg-yellow-500'
+                            : 'bg-red-600 dark:bg-red-500'
+                    }`}
+                    style={{ width: `${instrument.avgAttendance}%` }}
+                  />
                 </div>
               </div>
             ))}

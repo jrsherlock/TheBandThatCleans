@@ -56,7 +56,8 @@ const SHEETS = {
   ACTUAL_ROSTER: {
     name: "ActualRoster",
     headers: [
-      "name", "instrument", "grade", "section"
+      "name", "instrument", "grade", "section",
+      "event1", "event2", "event3", "event4", "event5", "event6", "event7"
     ]
   },
   ATTENDANCE_LOG: {
@@ -403,22 +404,98 @@ function findBestMatch(extractedName, roster, threshold) {
 
 /**
  * Handles fetching all data (Lots and Students) for initialization.
+ * NOTE: Students data now comes from ActualRoster tab which includes attendance columns (event1-event7)
  */
 function handleGetData() {
   const lotsData = readSheetData(SHEETS.LOTS);
-  const studentsData = readSheetData(SHEETS.STUDENTS);
-  
-  // Convert date fields back to Date objects for the frontend, assuming UTC time for transfer
+
+  // Read ActualRoster sheet with attendance data
+  const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+  const rosterSheet = ss.getSheetByName(SHEETS.ACTUAL_ROSTER.name);
+
+  if (!rosterSheet) {
+    throw new Error('ActualRoster sheet not found');
+  }
+
+  const rosterData = rosterSheet.getDataRange().getValues();
+  if (rosterData.length === 0) {
+    return createJsonResponse({ lots: lotsData, students: [] });
+  }
+
+  const headers = rosterData[0];
+
+  // Find column indices
+  const nameIdx = headers.indexOf('name');
+  const instrumentIdx = headers.indexOf('instrument');
+  const gradeIdx = headers.indexOf('grade');
+  const sectionIdx = headers.indexOf('section');
+
+  // Attendance columns are E through K (indices 4-10)
+  // These columns have dynamic headers like "Aug. 31 - 45%", so we use fixed positions
+  const event1Idx = 4;  // Column E
+  const event2Idx = 5;  // Column F
+  const event3Idx = 6;  // Column G
+  const event4Idx = 7;  // Column H
+  const event5Idx = 8;  // Column I
+  const event6Idx = 9;  // Column J
+  const event7Idx = 10; // Column K
+
+  // Build students array
+  const studentsData = [];
+  for (let i = 1; i < rosterData.length; i++) {
+    const row = rosterData[i];
+    studentsData.push({
+      id: i, // Use row number as ID
+      name: row[nameIdx] || '',
+      instrument: row[instrumentIdx] || '',
+      grade: row[gradeIdx] || '',
+      section: row[sectionIdx] || '',
+      event1: row[event1Idx] || '',
+      event2: row[event2Idx] || '',
+      event3: row[event3Idx] || '',
+      event4: row[event4Idx] || '',
+      event5: row[event5Idx] || '',
+      event6: row[event6Idx] || '',
+      event7: row[event7Idx] || ''
+    });
+  }
+
+  // Convert date fields for lots
   lotsData.forEach(lot => {
     if (lot.lastUpdated) lot.lastUpdated = new Date(lot.lastUpdated);
     if (lot.actualStartTime) lot.actualStartTime = new Date(lot.actualStartTime);
     if (lot.completedTime) lot.completedTime = new Date(lot.completedTime);
   });
-  
-  studentsData.forEach(student => {
-    if (student.checkInTime) student.checkInTime = new Date(student.checkInTime);
+
+  // Merge with today's check-in data from STUDENTS sheet (for check-in/check-out times and lot assignments)
+  const checkInData = readSheetData(SHEETS.STUDENTS);
+  const checkInMap = {};
+  checkInData.forEach(student => {
+    checkInMap[student.name] = {
+      checkedIn: student.checkedIn,
+      checkInTime: student.checkInTime ? new Date(student.checkInTime) : null,
+      checkOutTime: student.checkOutTime ? new Date(student.checkOutTime) : null,
+      assignedLot: student.assignedLot
+    };
   });
-  
+
+  // Merge attendance data with check-in data
+  studentsData.forEach(student => {
+    const checkIn = checkInMap[student.name];
+    if (checkIn) {
+      student.checkedIn = checkIn.checkedIn;
+      student.checkInTime = checkIn.checkInTime;
+      student.checkOutTime = checkIn.checkOutTime;
+      student.assignedLot = checkIn.assignedLot;
+    } else {
+      // Default values if no check-in data exists
+      student.checkedIn = false;
+      student.checkInTime = null;
+      student.checkOutTime = null;
+      student.assignedLot = null;
+    }
+  });
+
   return createJsonResponse({ lots: lotsData, students: studentsData });
 }
 
