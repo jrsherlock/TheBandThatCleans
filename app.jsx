@@ -543,6 +543,19 @@ const App = () => {
     // Total roster size (hardcoded to 246 for now)
     const totalRosterSize = 246;
 
+    // DEBUG: Check-in count comparison
+    const digitalCheckInCount = students.filter(s => s.checkedIn).length;
+    console.log('📊 STATS CALCULATION DEBUG:');
+    console.log('  - Dashboard "Students Present" (from lot sign-ups):', totalStudentsSignedUp);
+    console.log('  - Digital check-ins (students.checkedIn=true):', digitalCheckInCount);
+    console.log('  - Discrepancy:', totalStudentsSignedUp - digitalCheckInCount);
+    console.log('  - Lot breakdown:', lots.map(l => ({
+      id: l.id,
+      name: l.name,
+      aiCount: l.aiStudentCount,
+      signUpCount: l.totalStudentsSignedUp
+    })));
+
     return {
       totalLots,
       completedLots,
@@ -550,7 +563,7 @@ const App = () => {
       totalStudents: totalRosterSize, // Total roster size
       totalStudentsSignedUp,
     };
-  }, [lots]);
+  }, [lots, students]);
 
   // Handler for single lot status update
   const handleLotStatusUpdate = async (lotId, status) => {

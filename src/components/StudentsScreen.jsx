@@ -85,6 +85,15 @@ const StudentsScreen = ({ students, currentUser, onStudentUpdate, lots = [] }) =
       // Check attendance metrics
       const metrics = calculateAttendanceMetrics(students[0]);
       console.log('Calculated metrics for first student:', metrics);
+
+      // DEBUG: Check-in count discrepancy
+      const checkedInCount = students.filter(s => s.checkedIn).length;
+      const checkedInStudents = students.filter(s => s.checkedIn);
+      console.log('🔍 CHECK-IN COUNT DEBUG:');
+      console.log('  - Total students in array:', students.length);
+      console.log('  - Students with checkedIn=true:', checkedInCount);
+      console.log('  - Checked-in student IDs:', checkedInStudents.map(s => s.id));
+      console.log('  - Sample checked-in student:', checkedInStudents[0]);
     }
   }, [students]);
 
