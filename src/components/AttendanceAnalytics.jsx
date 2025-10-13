@@ -118,11 +118,24 @@ const AttendanceAnalytics = ({ students }) => {
       totalStudents: stats.total
     })).sort((a, b) => b.avgAttendance - a.avgAttendance);
 
-    // Overall stats
+    // Overall stats - calculate total attendances from all students
+    let totalActualAttendances = 0;
+    let totalExcused = 0;
+    students.forEach(s => {
+      eventFields.forEach(field => {
+        const value = s[field];
+        if (value === 'X' || value === 'x') {
+          totalActualAttendances++;
+        } else if (value === 'EX' || value === 'ex' || value === 'Ex') {
+          totalExcused++;
+        }
+      });
+    });
+
     const totalPossibleAttendances = students.length * 7;
-    const totalActualAttendances = studentStats.reduce((sum, s) => sum + s.attended, 0);
-    const overallAttendanceRate = totalPossibleAttendances > 0 
-      ? Math.round((totalActualAttendances / totalPossibleAttendances) * 100) 
+    const totalEligibleAttendances = totalPossibleAttendances - totalExcused;
+    const overallAttendanceRate = totalEligibleAttendances > 0
+      ? Math.round((totalActualAttendances / totalEligibleAttendances) * 100)
       : 0;
 
     return {
