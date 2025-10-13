@@ -8,7 +8,7 @@ import React, { useState, useMemo, useEffect } from 'react';
 import {
   Users, MapPin, AlertTriangle, MessageSquare, Clock, PenLine, Filter, CheckCircle, Play,
   Grid3x3, List, Map as MapIcon, ArrowUpDown, Navigation, ExternalLink, Upload, FileImage,
-  Sparkles, UserCheck
+  Sparkles, UserCheck, ChevronDown
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -204,42 +204,47 @@ const LotCard = ({ lot, students, currentUser, onStatusChange, onEditClick, onUp
         )}
       </div>
 
-      {/* Status Change Buttons - Only for admins */}
+      {/* Status Change Dropdown - Only for admins */}
       {canEdit && onStatusChange && (
-        <div className="space-y-2 mb-4">
-          <div className="text-xs font-semibold text-gray-600 dark:text-gray-400 uppercase tracking-wide mb-2">
+        <div className="mb-4">
+          <label
+            htmlFor={`status-select-${lot.id}`}
+            className="block text-xs font-semibold text-gray-600 dark:text-gray-400 uppercase tracking-wide mb-2"
+          >
             Change Status
-          </div>
-          <div className="grid grid-cols-1 gap-2">
-            {statuses.map(status => {
-              const Icon = getStatusIcon(status);
-              const label = getStatusLabel(status);
-              const colors = getStatusCardColors(status);
-              const isActive = lot.status === status;
-
-              return (
-                <button
-                  key={status}
-                  onClick={() => onStatusChange(lot.id, status)}
-                  disabled={isActive}
-                  aria-label={`Set status to ${label}`}
-                  className={`
-                    flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium
-                    transition-all duration-200 border-2
-                    ${isActive
-                      ? `${colors.badgeBg} text-white cursor-default`
-                      : `bg-white dark:bg-gray-800 ${colors.buttonBorder} ${colors.buttonText} ${colors.buttonHover} hover:-translate-y-0.5 active:translate-y-0`
-                    }
-                    focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 dark:focus:ring-blue-400
-                    disabled:cursor-not-allowed
-                    min-h-[44px]
-                  `}
-                >
-                  <Icon size={16} aria-hidden="true" />
-                  <span>{isActive ? `Current: ${label}` : label}</span>
-                </button>
-              );
-            })}
+          </label>
+          <div className="relative">
+            <select
+              id={`status-select-${lot.id}`}
+              value={lot.status}
+              onChange={(e) => onStatusChange(lot.id, e.target.value)}
+              aria-label={`Change status for ${lot.name}`}
+              className={`
+                w-full appearance-none px-4 py-2.5 pr-10 rounded-lg text-sm font-medium
+                transition-all duration-200 border-2
+                bg-white dark:bg-gray-800
+                ${getStatusCardColors(lot.status).buttonBorder}
+                ${getStatusCardColors(lot.status).buttonText}
+                hover:shadow-md
+                focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 dark:focus:ring-blue-400
+                cursor-pointer
+                min-h-[44px]
+              `}
+            >
+              {statuses.map(status => {
+                const label = getStatusLabel(status);
+                return (
+                  <option key={status} value={status}>
+                    {lot.status === status ? `Current: ${label}` : label}
+                  </option>
+                );
+              })}
+            </select>
+            <ChevronDown
+              size={20}
+              className={`absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none ${getStatusCardColors(lot.status).buttonText}`}
+              aria-hidden="true"
+            />
           </div>
         </div>
       )}

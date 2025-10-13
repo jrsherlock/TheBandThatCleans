@@ -1069,6 +1069,7 @@ const App = () => {
         {/* Students Screen */}
         <StudentsScreen
           students={students}
+          lots={lots}
           currentUser={currentUser}
           onStudentUpdate={handleStudentUpdate}
         />
