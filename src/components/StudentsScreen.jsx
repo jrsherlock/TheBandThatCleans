@@ -5,13 +5,14 @@
  */
 
 import React, { useState, useMemo } from 'react';
-import { Users, CheckCircle, Filter, Search, Clock, ArrowUpDown, ArrowUp, ArrowDown, X } from 'lucide-react';
+import { Users, CheckCircle, Filter, Search, Clock, ArrowUpDown, ArrowUp, ArrowDown, X, TrendingUp, Award, BarChart3, ChevronDown, ChevronUp } from 'lucide-react';
 import { format, formatDistanceToNow } from 'date-fns';
 import { motion } from 'framer-motion';
 import { toast } from 'react-hot-toast';
 import { hasPermission } from '../utils/permissions.js';
 import { isReadOnly } from '../utils/roleHelpers.jsx';
 import { ProtectedButton, ReadOnlyBadge } from './ProtectedComponents.jsx';
+import AttendanceAnalytics from './AttendanceAnalytics.jsx';
 
 const MotionDiv = motion.div;
 
@@ -38,6 +39,32 @@ const getLotName = (lotId, lots) => {
 };
 
 /**
+ * Helper function to calculate attendance metrics for a student
+ */
+const calculateAttendanceMetrics = (student) => {
+  const eventFields = ['event1', 'event2', 'event3', 'event4', 'event5', 'event6', 'event7'];
+
+  let attended = 0;
+  let excused = 0;
+  const eventDetails = [];
+
+  eventFields.forEach((field, index) => {
+    const value = student[field];
+    if (value === 'X' || value === 'x') {
+      attended++;
+      eventDetails.push({ event: index + 1, status: 'attended' });
+    } else if (value === 'EX' || value === 'ex') {
+      excused++;
+      eventDetails.push({ event: index + 1, status: 'excused' });
+    } else {
+      eventDetails.push({ event: index + 1, status: 'absent' });
+    }
+  });
+
+  return { attended, excused, eventDetails, total: eventFields.length };
+};
+
+/**
  * Main Students Screen Component - Spreadsheet-Style Check-In Ledger
  */
 const StudentsScreen = ({ students, currentUser, onStudentUpdate, lots = [] }) => {
@@ -46,8 +73,11 @@ const StudentsScreen = ({ students, currentUser, onStudentUpdate, lots = [] }) =
   const [statusFilter, setStatusFilter] = useState("all");
   const [yearFilter, setYearFilter] = useState("all");
   const [instrumentFilter, setInstrumentFilter] = useState("all");
+  const [lotFilter, setLotFilter] = useState("all");
+  const [attendanceFilter, setAttendanceFilter] = useState("all");
   const [sortColumn, setSortColumn] = useState("name");
   const [sortDirection, setSortDirection] = useState("asc");
+  const [showAnalytics, setShowAnalytics] = useState(false);
 
   const canCheckIn = hasPermission(currentUser, 'canCheckInStudents');
   const canView = hasPermission(currentUser, 'canViewStudentRoster');
@@ -77,8 +107,31 @@ const StudentsScreen = ({ students, currentUser, onStudentUpdate, lots = [] }) =
         (statusFilter === "still-cleaning" && s.checkedIn && !s.checkOutTime);
       const yearMatch = yearFilter === "all" || s.year === yearFilter;
       const instrumentMatch = instrumentFilter === "all" || s.instrument === instrumentFilter;
+      const lotMatch = lotFilter === "all" || s.assignedLot === lotFilter;
 
-      return nameMatch && sectionMatch && statusMatch && yearMatch && instrumentMatch;
+      // Attendance filter
+      let attendanceMatch = true;
+      if (attendanceFilter !== "all") {
+        const metrics = calculateAttendanceMetrics(s);
+        switch (attendanceFilter) {
+          case "3+":
+            attendanceMatch = metrics.attended >= 3;
+            break;
+          case "5+":
+            attendanceMatch = metrics.attended >= 5;
+            break;
+          case "perfect":
+            attendanceMatch = metrics.attended === 7;
+            break;
+          case "low":
+            attendanceMatch = metrics.attended < 3;
+            break;
+          default:
+            attendanceMatch = true;
+        }
+      }
+
+      return nameMatch && sectionMatch && statusMatch && yearMatch && instrumentMatch && lotMatch && attendanceMatch;
     });
 
     // Sort students
@@ -114,6 +167,14 @@ const StudentsScreen = ({ students, currentUser, onStudentUpdate, lots = [] }) =
           aVal = getLotName(a.assignedLot, lots);
           bVal = getLotName(b.assignedLot, lots);
           break;
+        case 'attended':
+          aVal = calculateAttendanceMetrics(a).attended;
+          bVal = calculateAttendanceMetrics(b).attended;
+          break;
+        case 'excused':
+          aVal = calculateAttendanceMetrics(a).excused;
+          bVal = calculateAttendanceMetrics(b).excused;
+          break;
         default:
           return 0;
       }
@@ -124,16 +185,18 @@ const StudentsScreen = ({ students, currentUser, onStudentUpdate, lots = [] }) =
     });
 
     return filtered;
-  }, [students, searchTerm, sectionFilter, statusFilter, yearFilter, instrumentFilter, sortColumn, sortDirection, lots]);
+  }, [students, searchTerm, sectionFilter, statusFilter, yearFilter, instrumentFilter, lotFilter, attendanceFilter, sortColumn, sortDirection, lots]);
 
   // Statistics
   const stats = useMemo(() => {
     const checkedIn = students.filter(s => s.checkedIn).length;
     const stillCleaning = students.filter(s => s.checkedIn && !s.checkOutTime).length;
+    const checkedOut = students.filter(s => s.checkOutTime).length;
     return {
       total: students.length,
       checkedIn,
       stillCleaning,
+      checkedOut,
       percentage: students.length > 0 ? Math.round(checkedIn / students.length * 100) : 0
     };
   }, [students]);
@@ -166,6 +229,8 @@ const StudentsScreen = ({ students, currentUser, onStudentUpdate, lots = [] }) =
     setStatusFilter("all");
     setYearFilter("all");
     setInstrumentFilter("all");
+    setLotFilter("all");
+    setAttendanceFilter("all");
   };
 
   const handleSort = (column) => {
@@ -199,23 +264,53 @@ const StudentsScreen = ({ students, currentUser, onStudentUpdate, lots = [] }) =
         {!canCheckIn && <ReadOnlyBadge />}
       </div>
 
-      {/* Statistics KPI Boxes */}
-      <div className="grid grid-cols-3 gap-4 mb-6 flex-shrink-0">
-        <div className="bg-blue-50 dark:bg-blue-900/30 p-4 rounded-lg text-center">
+      {/* Statistics KPI Boxes - Clickable to filter */}
+      <div className="grid grid-cols-4 gap-4 mb-6 flex-shrink-0">
+        <button
+          onClick={() => {
+            setStatusFilter("all");
+            setLotFilter("all");
+            setAttendanceFilter("all");
+          }}
+          className="bg-blue-50 dark:bg-blue-900/30 p-4 rounded-lg text-center hover:bg-blue-100 dark:hover:bg-blue-900/50 transition-colors cursor-pointer"
+        >
           <Users className="mx-auto mb-2 text-blue-600 dark:text-blue-400" size={24} />
           <div className="text-2xl font-bold text-blue-600 dark:text-blue-400">{stats.total}</div>
           <div className="text-sm text-blue-800 dark:text-blue-300">Total Students</div>
-        </div>
-        <div className="bg-green-50 dark:bg-green-900/30 p-4 rounded-lg text-center">
+        </button>
+        <button
+          onClick={() => {
+            setStatusFilter("checked-in");
+            setLotFilter("all");
+          }}
+          className="bg-green-50 dark:bg-green-900/30 p-4 rounded-lg text-center hover:bg-green-100 dark:hover:bg-green-900/50 transition-colors cursor-pointer"
+        >
           <CheckCircle className="mx-auto mb-2 text-green-600 dark:text-green-400" size={24} />
           <div className="text-2xl font-bold text-green-600 dark:text-green-400">{stats.checkedIn}</div>
-          <div className="text-sm text-green-800 dark:text-green-300">Checked In</div>
-        </div>
-        <div className="bg-purple-50 dark:bg-purple-900/30 p-4 rounded-lg text-center">
+          <div className="text-sm text-green-800 dark:text-green-300">Checked In Today</div>
+        </button>
+        <button
+          onClick={() => {
+            setStatusFilter("still-cleaning");
+            setLotFilter("all");
+          }}
+          className="bg-purple-50 dark:bg-purple-900/30 p-4 rounded-lg text-center hover:bg-purple-100 dark:hover:bg-purple-900/50 transition-colors cursor-pointer"
+        >
           <Clock className="mx-auto mb-2 text-purple-600 dark:text-purple-400" size={24} />
           <div className="text-2xl font-bold text-purple-600 dark:text-purple-400">{stats.stillCleaning}</div>
           <div className="text-sm text-purple-800 dark:text-purple-300">Still Cleaning</div>
-        </div>
+        </button>
+        <button
+          onClick={() => {
+            setStatusFilter("checked-out");
+            setLotFilter("all");
+          }}
+          className="bg-orange-50 dark:bg-orange-900/30 p-4 rounded-lg text-center hover:bg-orange-100 dark:hover:bg-orange-900/50 transition-colors cursor-pointer"
+        >
+          <CheckCircle className="mx-auto mb-2 text-orange-600 dark:text-orange-400" size={24} />
+          <div className="text-2xl font-bold text-orange-600 dark:text-orange-400">{stats.checkedOut}</div>
+          <div className="text-sm text-orange-800 dark:text-orange-300">Checked Out Today</div>
+        </button>
       </div>
 
       {/* Search and Filters */}
@@ -239,7 +334,7 @@ const StudentsScreen = ({ students, currentUser, onStudentUpdate, lots = [] }) =
           )}
         </div>
 
-        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-8 gap-3">
           <select
             value={sectionFilter}
             onChange={e => setSectionFilter(e.target.value)}
@@ -279,6 +374,27 @@ const StudentsScreen = ({ students, currentUser, onStudentUpdate, lots = [] }) =
             {years.map(y => <option key={y} value={y}>{y.charAt(0).toUpperCase() + y.slice(1)}</option>)}
           </select>
 
+          <select
+            value={lotFilter}
+            onChange={e => setLotFilter(e.target.value)}
+            className="px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 rounded-lg focus:ring-2 focus:ring-blue-500 dark:focus:ring-blue-400 focus:border-transparent"
+          >
+            <option value="all">All Lots</option>
+            {lots.map(lot => <option key={lot.id} value={lot.id}>{lot.name}</option>)}
+          </select>
+
+          <select
+            value={attendanceFilter}
+            onChange={e => setAttendanceFilter(e.target.value)}
+            className="px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 rounded-lg focus:ring-2 focus:ring-blue-500 dark:focus:ring-blue-400 focus:border-transparent"
+          >
+            <option value="all">All Attendance</option>
+            <option value="perfect">Perfect (7/7)</option>
+            <option value="5+">5+ Events</option>
+            <option value="3+">3+ Events</option>
+            <option value="low">Less than 3</option>
+          </select>
+
           <button
             onClick={handleClearFilters}
             className="px-3 py-2 text-sm bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors flex items-center justify-center gap-2"
@@ -294,6 +410,25 @@ const StudentsScreen = ({ students, currentUser, onStudentUpdate, lots = [] }) =
           </div>
         </div>
       </div>
+
+      {/* Analytics Toggle Button */}
+      {(hasPermission(currentUser, 'canViewReports') || hasPermission(currentUser, 'canCheckInStudents')) && (
+        <div className="mb-4">
+          <button
+            onClick={() => setShowAnalytics(!showAnalytics)}
+            className="flex items-center gap-2 px-4 py-2 bg-blue-600 dark:bg-blue-500 text-white rounded-lg hover:bg-blue-700 dark:hover:bg-blue-600 transition-colors"
+          >
+            <BarChart3 size={18} />
+            <span>{showAnalytics ? 'Hide' : 'Show'} Attendance Analytics</span>
+            {showAnalytics ? <ChevronUp size={18} /> : <ChevronDown size={18} />}
+          </button>
+        </div>
+      )}
+
+      {/* Attendance Analytics Section */}
+      {showAnalytics && (hasPermission(currentUser, 'canViewReports') || hasPermission(currentUser, 'canCheckInStudents')) && (
+        <AttendanceAnalytics students={students} />
+      )}
 
       {/* Spreadsheet-Style Table */}
       <div className="flex-1 overflow-auto border border-gray-200 dark:border-gray-700 rounded-lg">
@@ -363,6 +498,24 @@ const StudentsScreen = ({ students, currentUser, onStudentUpdate, lots = [] }) =
                   {getSortIcon('assignedLot')}
                 </div>
               </th>
+              <th
+                onClick={() => handleSort('attended')}
+                className="px-4 py-3 text-center font-semibold text-gray-700 dark:text-gray-300 cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors hidden xl:table-cell"
+              >
+                <div className="flex items-center gap-2 justify-center">
+                  <span>Events Attended</span>
+                  {getSortIcon('attended')}
+                </div>
+              </th>
+              <th
+                onClick={() => handleSort('excused')}
+                className="px-4 py-3 text-center font-semibold text-gray-700 dark:text-gray-300 cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors hidden xl:table-cell"
+              >
+                <div className="flex items-center gap-2 justify-center">
+                  <span>Excused</span>
+                  {getSortIcon('excused')}
+                </div>
+              </th>
               {canCheckIn && (
                 <th className="px-4 py-3 text-center font-semibold text-gray-700 dark:text-gray-300">
                   Action
@@ -375,6 +528,7 @@ const StudentsScreen = ({ students, currentUser, onStudentUpdate, lots = [] }) =
               filteredStudents.map((student, index) => {
                 const timeInfo = formatCheckInTime(student.checkInTime);
                 const lotName = getLotName(student.assignedLot, lots);
+                const attendanceMetrics = calculateAttendanceMetrics(student);
 
                 return (
                   <motion.tr
@@ -456,6 +610,35 @@ const StudentsScreen = ({ students, currentUser, onStudentUpdate, lots = [] }) =
                       )}
                     </td>
 
+                    {/* Events Attended */}
+                    <td className="px-4 py-3 text-center hidden xl:table-cell">
+                      <div className="flex flex-col items-center">
+                        <span className={`
+                          text-lg font-bold
+                          ${attendanceMetrics.attended >= 5
+                            ? 'text-green-600 dark:text-green-400'
+                            : attendanceMetrics.attended >= 3
+                              ? 'text-yellow-600 dark:text-yellow-400'
+                              : 'text-red-600 dark:text-red-400'
+                          }
+                        `}>
+                          {attendanceMetrics.attended}
+                        </span>
+                        <span className="text-xs text-gray-500 dark:text-gray-400">/ 7</span>
+                      </div>
+                    </td>
+
+                    {/* Excused */}
+                    <td className="px-4 py-3 text-center text-gray-700 dark:text-gray-300 hidden xl:table-cell">
+                      {attendanceMetrics.excused > 0 ? (
+                        <span className="inline-flex items-center px-2 py-1 bg-yellow-100 dark:bg-yellow-900/40 text-yellow-800 dark:text-yellow-300 text-xs rounded">
+                          {attendanceMetrics.excused}
+                        </span>
+                      ) : (
+                        <span className="text-gray-400 dark:text-gray-500">-</span>
+                      )}
+                    </td>
+
                     {/* Action */}
                     {canCheckIn && (
                       <td className="px-4 py-3 text-center">
@@ -479,7 +662,7 @@ const StudentsScreen = ({ students, currentUser, onStudentUpdate, lots = [] }) =
             ) : (
               <tr>
                 <td
-                  colSpan={canCheckIn ? 8 : 7}
+                  colSpan={canCheckIn ? 10 : 9}
                   className="px-4 py-12 text-center text-gray-500 dark:text-gray-400"
                 >
                   <div className="flex flex-col items-center gap-2">

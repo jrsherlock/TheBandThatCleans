@@ -48,7 +48,9 @@ const SHEETS = {
     name: "Students",
     headers: [
       "id", "name", "instrument", "section", "year",
-      "checkedIn", "checkInTime", "assignedLot"
+      "checkedIn", "checkInTime", "assignedLot",
+      // Attendance tracking for 7 events (columns F-L in sheet)
+      "event1", "event2", "event3", "event4", "event5", "event6", "event7"
     ]
   },
   ACTUAL_ROSTER: {
