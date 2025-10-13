@@ -543,24 +543,16 @@ const App = () => {
     // Total roster size (hardcoded to 246 for now)
     const totalRosterSize = 246;
 
-    // DEBUG: Check-in count comparison with AI matching details
-    const digitalCheckInCount = students.filter(s => s.checkedIn).length;
-    const aiMatchedCount = students.filter(s => s.matchedByAI && s.checkedIn).length;
-    const manualCheckInCount = students.filter(s => s.manualCheckIn && s.checkedIn).length;
-    const placeholderCount = students.filter(s => s.isPlaceholder && s.checkedIn).length;
-
-    console.log('📊 HYBRID CHECK-IN SYSTEM STATS:');
-    console.log('  ✅ Total Students Checked In:', digitalCheckInCount);
-    console.log('    - 🤖 AI-Matched Students:', aiMatchedCount);
-    console.log('    - ⚠️  Placeholder Students (need reconciliation):', placeholderCount);
-    console.log('    - ✋ Manual Check-Ins:', manualCheckInCount);
-    console.log('  📋 Dashboard Count (from lot sign-ups):', totalStudentsSignedUp);
-    console.log('  🎯 Counts Match?', digitalCheckInCount === totalStudentsSignedUp ? '✅ YES' : '❌ NO');
+    // DEBUG: AI-scanned lot counts (single source of truth)
+    console.log('📊 AI-SCANNED LOT COUNT SYSTEM:');
+    console.log('  ✅ Total Students Present (from AI-scanned lots):', totalStudentsSignedUp);
+    console.log('  📋 This count is used across Dashboard, Header, and Students tab');
     console.log('  - Lot breakdown:', lots.map(l => ({
       id: l.id,
       name: l.name,
       aiCount: l.aiStudentCount,
-      signUpCount: l.totalStudentsSignedUp
+      manualCount: l.totalStudentsSignedUp,
+      usingAI: l.aiStudentCount !== undefined && l.aiStudentCount !== null && l.aiStudentCount !== ''
     })));
 
     return {
