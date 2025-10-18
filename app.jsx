@@ -1094,11 +1094,11 @@ const App = () => {
   const LoadingSpinner = () => (
     <div className="flex items-center justify-center min-h-screen bg-gradient-to-br from-blue-50 via-white to-purple-50 dark:from-gray-900 dark:via-gray-800 dark:to-gray-900">
       <div className="text-center">
-        {/* TBTC Logo - Increased size for better visibility */}
+        {/* TBTC Logo - 2x larger for maximum visibility */}
         <img
           src={TBTCLogo}
           alt="The Band That Cleans Logo"
-          className="h-48 w-48 sm:h-56 sm:w-56 md:h-64 md:w-64 object-contain mx-auto mb-6 animate-pulse"
+          className="h-96 w-96 sm:w-[28rem] sm:h-[28rem] md:w-[32rem] md:h-[32rem] object-contain mx-auto mb-6 animate-pulse"
         />
         <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 dark:border-blue-400 mx-auto mb-4"></div>
         <p className="text-gray-600 dark:text-gray-300">Loading TBTC platform...</p>
@@ -1109,12 +1109,12 @@ const App = () => {
   // Error component
   const ErrorDisplay = ({ error, onRetry }) => (
     <div className="flex items-center justify-center min-h-screen bg-gradient-to-br from-blue-50 via-white to-purple-50 dark:from-gray-900 dark:via-gray-800 dark:to-gray-900">
-      <div className="text-center max-w-md mx-auto p-6">
-        {/* TBTC Logo - Increased size for better visibility */}
+      <div className="text-center max-w-2xl mx-auto p-6">
+        {/* TBTC Logo - 2x larger for maximum visibility */}
         <img
           src={TBTCLogo}
           alt="The Band That Cleans Logo"
-          className="h-40 w-40 sm:h-48 sm:w-48 md:h-56 md:w-56 object-contain mx-auto mb-4"
+          className="h-80 w-80 sm:h-96 sm:w-96 md:w-[28rem] md:h-[28rem] object-contain mx-auto mb-4"
         />
         <AlertTriangle className="h-12 w-12 text-red-500 dark:text-red-400 mx-auto mb-4" />
         <h2 className="text-xl font-semibold text-gray-900 dark:text-white mb-2">Failed to Load</h2>
