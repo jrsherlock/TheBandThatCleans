@@ -23,6 +23,7 @@ The parking lot card UI has been enhanced with:
 | Status | Color | Hex Code |
 |--------|-------|----------|
 | Not Started | Gray | `#6B7280` |
+| Ready | Teal | `#14B8A6` |
 | In Progress | Blue | `#3B82F6` |
 | Needs Help | Red | `#EF4444` |
 | Pending Approval | Yellow | `#EAB308` |

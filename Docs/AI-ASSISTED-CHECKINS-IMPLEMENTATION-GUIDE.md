@@ -219,7 +219,7 @@ function handleSignInSheetUpload() {
         
         return createJsonResponse({ 
           success: true, 
-          message: 'Sign-in sheet uploaded successfully',
+          message: 'Parking Lot Cleanup Sign-in sheet uploaded successfully',
           lotId: lotId,
           aiCount: aiCount
         });

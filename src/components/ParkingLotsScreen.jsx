@@ -17,6 +17,8 @@ import { isReadOnly } from '../utils/roleHelpers.jsx';
 import { ProtectedButton, ProtectedSelect } from './ProtectedComponents.jsx';
 import LotEditModal from './LotEditModal.jsx';
 import SignInSheetUploadModal from './SignInSheetUpload/SignInSheetUploadModal.jsx';
+import DriveLinkButton from './DriveLinkButton.jsx';
+import { LeafletMapView } from './LeafletMapView.jsx';
 
 const MotionDiv = motion.div;
 
@@ -29,7 +31,10 @@ const getStatusIcon = (status) => {
     case 'in-progress': return Play;
     case 'needs-help': return AlertTriangle;
     case 'pending-approval': return Clock;
-    case 'not-started': default: return MapPin;
+    case 'ready': return CheckCircle;
+    // Backward compatibility: map old "not-started" to "ready"
+    case 'not-started':
+    default: return CheckCircle;
   }
 };
 
@@ -42,14 +47,18 @@ const getStatusLabel = (status) => {
     case 'in-progress': return 'In Progress';
     case 'needs-help': return 'Needs Help';
     case 'pending-approval': return 'Pending';
-    case 'not-started': default: return 'Not Started';
+    case 'ready': return 'Ready';
+    // Backward compatibility: map old "not-started" to "ready"
+    case 'not-started':
+    default: return 'Ready';
   }
 };
 
 /**
  * Helper function to get status border and background colors
+ * Exported for use in LeafletMapView
  */
-const getStatusCardColors = (status) => {
+export const getStatusCardColors = (status) => {
   switch (status) {
     case 'complete':
       return {
@@ -69,6 +78,15 @@ const getStatusCardColors = (status) => {
         buttonText: 'text-blue-700 dark:text-blue-300',
         buttonHover: 'hover:bg-blue-50 dark:hover:bg-blue-900/20'
       };
+    case 'ready':
+      return {
+        border: 'border-teal-500 dark:border-teal-400',
+        bg: 'bg-teal-50/50 dark:bg-teal-900/10',
+        badgeBg: 'bg-teal-500',
+        buttonBorder: 'border-teal-500 dark:border-teal-400',
+        buttonText: 'text-teal-700 dark:text-teal-300',
+        buttonHover: 'hover:bg-teal-50 dark:hover:bg-teal-900/20'
+      };
     case 'needs-help':
       return {
         border: 'border-red-500 dark:border-red-400',
@@ -87,15 +105,16 @@ const getStatusCardColors = (status) => {
         buttonText: 'text-yellow-700 dark:text-yellow-300',
         buttonHover: 'hover:bg-yellow-50 dark:hover:bg-yellow-900/20'
       };
+    // Backward compatibility: map old "not-started" to "ready"
     case 'not-started':
     default:
       return {
-        border: 'border-gray-400 dark:border-gray-500',
-        bg: 'bg-gray-50/50 dark:bg-gray-800/50',
-        badgeBg: 'bg-gray-500',
-        buttonBorder: 'border-gray-400 dark:border-gray-500',
-        buttonText: 'text-gray-700 dark:text-gray-300',
-        buttonHover: 'hover:bg-gray-100 dark:hover:bg-gray-700/50'
+        border: 'border-teal-500 dark:border-teal-400',
+        bg: 'bg-teal-50/50 dark:bg-teal-900/10',
+        badgeBg: 'bg-teal-500',
+        buttonBorder: 'border-teal-500 dark:border-teal-400',
+        buttonText: 'text-teal-700 dark:text-teal-300',
+        buttonHover: 'hover:bg-teal-50 dark:hover:bg-teal-900/20'
       };
   }
 };
@@ -266,17 +285,10 @@ const LotCard = ({ lot, students, currentUser, onStatusChange, onEditClick, onUp
       {/* View Sign-In Sheet Button - For admins and volunteers when image exists */}
       {(canEdit || canUploadSignInSheets) && lot.signUpSheetPhoto && lot.signUpSheetPhoto.trim() !== '' && (
         <div className="mb-4">
-          <a
-            href={lot.signUpSheetPhoto}
-            target="_blank"
-            rel="noopener noreferrer"
-            aria-label={`View sign-in sheet for ${lot.name}`}
-            className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300 rounded-lg hover:bg-blue-200 dark:hover:bg-blue-900/60 transition-all duration-200 hover:-translate-y-0.5 active:translate-y-0 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 dark:focus:ring-blue-400 min-h-[44px]"
-          >
-            <FileImage size={16} aria-hidden="true" />
-            <span className="text-sm font-medium">View Sign-In Sheet</span>
-            <ExternalLink size={14} aria-hidden="true" />
-          </a>
+          <DriveLinkButton
+            url={lot.signUpSheetPhoto}
+            lotName={lot.name}
+          />
         </div>
       )}
 
@@ -569,190 +581,19 @@ const LotListView = ({ lots, students, currentUser, onStatusChange, onEditClick,
 };
 
 /**
- * Map View Component - Interactive Google Maps display
+ * Map View Component - Leaflet/OpenStreetMap Integration
+ * Wrapper component that delegates to LeafletMapView
  */
 const LotMapView = ({ lots, students, currentUser, onStatusChange, getStatusStyles, StatusBadge }) => {
-  const [selectedLot, setSelectedLot] = useState(null);
-  const [userLocation, setUserLocation] = useState(null);
-  const [mapError, setMapError] = useState(null);
-  const [isLoadingMap, setIsLoadingMap] = useState(true);
-
-  const canEdit = hasPermission(currentUser, 'canEditLotStatus');
-
-  // Get user's assigned lot (for students)
-  const assignedLot = useMemo(() => {
-    if (currentUser.role === 'student') {
-      return lots.find(lot => (lot.assignedStudents || []).includes(currentUser.id));
-    }
-    return null;
-  }, [lots, currentUser]);
-
-  // Request user location
-  useEffect(() => {
-    if (navigator.geolocation) {
-      navigator.geolocation.getCurrentPosition(
-        (position) => {
-          setUserLocation({
-            lat: position.coords.latitude,
-            lng: position.coords.longitude
-          });
-        },
-        (error) => {
-          console.warn('Geolocation error:', error);
-          // Continue without user location
-        }
-      );
-    }
-  }, []);
-
-  // Get status color for markers
-  const getMarkerColor = (status) => {
-    const colors = getStatusCardColors(status);
-    switch (status) {
-      case 'complete': return '#10B981';
-      case 'in-progress': return '#3B82F6';
-      case 'needs-help': return '#EF4444';
-      case 'pending-approval': return '#EAB308';
-      case 'not-started': default: return '#6B7280';
-    }
-  };
-
-  // Get directions to lot
-  const getDirections = (lot) => {
-    if (!lot.latitude || !lot.longitude) {
-      alert('Location coordinates not available for this lot.');
-      return;
-    }
-
-    const destination = `${lot.latitude},${lot.longitude}`;
-    const origin = userLocation ? `${userLocation.lat},${userLocation.lng}` : '';
-    const url = `https://www.google.com/maps/dir/?api=1&destination=${destination}${origin ? `&origin=${origin}` : ''}`;
-    window.open(url, '_blank');
-  };
-
-  // Check if lots have coordinates
-  const lotsWithCoordinates = lots.filter(lot => lot.latitude && lot.longitude);
-  const hasCoordinates = lotsWithCoordinates.length > 0;
-
-  if (!hasCoordinates) {
-    return (
-      <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-8 text-center">
-        <MapIcon size={48} className="mx-auto text-gray-400 dark:text-gray-500 mb-4" />
-        <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">
-          Map View Not Available
-        </h3>
-        <p className="text-gray-600 dark:text-gray-400 mb-4">
-          Parking lot location coordinates have not been configured yet.
-        </p>
-        <p className="text-sm text-gray-500 dark:text-gray-500">
-          Please contact an administrator to add latitude and longitude data to the parking lots.
-        </p>
-      </div>
-    );
-  }
-
   return (
-    <div className="space-y-4">
-      {/* Map Container - Placeholder for now */}
-      <div className="bg-white dark:bg-gray-800 rounded-lg shadow overflow-hidden">
-        <div className="relative" style={{ height: '600px' }}>
-          {/* Placeholder for Google Maps */}
-          <div className="absolute inset-0 flex items-center justify-center bg-gray-100 dark:bg-gray-700">
-            <div className="text-center">
-              <MapIcon size={64} className="mx-auto text-gray-400 dark:text-gray-500 mb-4" />
-              <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">
-                Interactive Map View
-              </h3>
-              <p className="text-gray-600 dark:text-gray-400 mb-4">
-                Google Maps integration will be displayed here
-              </p>
-              <p className="text-sm text-gray-500 dark:text-gray-500 max-w-md mx-auto">
-                This feature requires Google Maps API configuration.
-                The map will show all parking lot locations with color-coded markers based on status.
-              </p>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* Lot List with Directions */}
-      <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-4">
-        <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
-          Parking Lots {assignedLot && '(Your assigned lot is highlighted)'}
-        </h3>
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {lotsWithCoordinates.map((lot) => {
-            const assignedStudents = students.filter(s => (lot.assignedStudents || []).includes(s.id));
-            const studentsPresent = assignedStudents.filter(s => s.checkedIn);
-            const statusColors = getStatusCardColors(lot.status);
-            const isAssigned = assignedLot?.id === lot.id;
-
-            return (
-              <div
-                key={lot.id}
-                className={`
-                  p-4 rounded-lg border-2 transition-all
-                  ${isAssigned
-                    ? 'border-blue-500 dark:border-blue-400 bg-blue-50 dark:bg-blue-900/20 ring-2 ring-blue-500 dark:ring-blue-400'
-                    : `${statusColors.border} ${statusColors.bg}`
-                  }
-                `}
-              >
-                <div className="flex items-start justify-between mb-2">
-                  <div className="flex-1">
-                    <h4 className="font-bold text-gray-900 dark:text-white">
-                      {lot.name}
-                      {isAssigned && (
-                        <span className="ml-2 text-xs bg-blue-500 text-white px-2 py-0.5 rounded-full">
-                          Your Lot
-                        </span>
-                      )}
-                    </h4>
-                    <div className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-400 mt-1">
-                      <MapPin size={14} />
-                      <span className="capitalize">{lot.zone || lot.section}</span>
-                    </div>
-                  </div>
-                  <StatusBadge status={lot.status} size="sm" />
-                </div>
-
-                {(() => {
-                  const hasAICount = lot.aiStudentCount !== undefined && lot.aiStudentCount !== null && lot.aiStudentCount !== '';
-                  const aiCount = hasAICount ? parseInt(lot.aiStudentCount) || 0 : null;
-                  const manualCount = lot.totalStudentsSignedUp || 0;
-                  const displayCount = hasAICount ? aiCount : manualCount;
-
-                  return (
-                    <div className="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300 mb-3">
-                      {hasAICount ? (
-                        <Sparkles size={14} className="text-purple-500 dark:text-purple-400" />
-                      ) : (
-                        <Users size={14} className="text-gray-500 dark:text-gray-400" />
-                      )}
-                      <span>{displayCount} {displayCount === 1 ? 'student' : 'students'}</span>
-                      {hasAICount && (
-                        <span className="text-xs px-1.5 py-0.5 rounded bg-purple-100 dark:bg-purple-900/40 text-purple-700 dark:text-purple-300">
-                          AI
-                        </span>
-                      )}
-                    </div>
-                  );
-                })()}
-
-                <button
-                  onClick={() => getDirections(lot)}
-                  className="w-full flex items-center justify-center gap-2 px-3 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors text-sm font-medium"
-                >
-                  <Navigation size={16} />
-                  Get Directions
-                  <ExternalLink size={14} />
-                </button>
-              </div>
-            );
-          })}
-        </div>
-      </div>
-    </div>
+    <LeafletMapView
+      lots={lots}
+      students={students}
+      currentUser={currentUser}
+      onStatusChange={onStatusChange}
+      getStatusStyles={getStatusStyles}
+      StatusBadge={StatusBadge}
+    />
   );
 };
 

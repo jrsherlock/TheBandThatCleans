@@ -6,7 +6,7 @@
 // Configuration - Update these values after deploying your Google Apps Script
 const API_CONFIG = {
   // Google Apps Script Web App URL (TBTC - MVP with CORS fixes - Deployed 2025-09-30)
-  BASE_URL: 'https://script.google.com/macros/s/AKfycbxGrLcwWWyiWUrEZqDDCOTZdSpsSSf4w-FXeQTBIwtphWqpZGivgntdsuf1Y_n-ib8T/exec',
+  BASE_URL: 'https://script.google.com/macros/s/AKfycbzKBDdZKleUjevZSEuwVVPJxidla5c_0mpr9P-LYhXZ6s0bmWGnwd_wV8jJ7O5bUBgu/exec',
     
   // API key for authentication (matches MOCK_API_KEY in Code.gs)
   API_KEY: 'tbtc-director-key-2024',
@@ -400,6 +400,25 @@ class TbtcApiService {
     } catch (error) {
       console.error('Failed to reconcile placeholder student:', error);
       throw new ApiError('Failed to reconcile placeholder student. Please try again.', 500);
+    }
+  }
+
+  // --- DATABASE MANAGEMENT METHODS ---
+
+  /**
+   * Reset the database for testing/development purposes
+   * Clears data from Students, AttendanceLog, and EventConfig tabs
+   * Preserves headers and does NOT touch Lots or ActualRoster tabs
+   * WARNING: This action cannot be undone!
+   */
+  async resetDatabase() {
+    try {
+      return await this.post({
+        type: 'RESET_DATABASE'
+      });
+    } catch (error) {
+      console.error('Failed to reset database:', error);
+      throw new ApiError('Failed to reset database. Please try again.', 500);
     }
   }
 }

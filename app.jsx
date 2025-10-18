@@ -117,7 +117,7 @@ const lotNames = [
 // Fallback sections for mock data only (real data comes from Google Sheet)
 const mockSections = ["Zone 1", "Zone 2", "Zone 3", "Zone 4", "Zone 5"];
 const priorities = ["high", "medium", "low"];
-const statuses = ["not-started", "ready", "in-progress", "needs-help", "pending-approval", "complete"];
+const statuses = ["ready", "in-progress", "needs-help", "pending-approval", "complete"];
 const studentInstruments = ["Flute", "Piccolo", "Clarinet", "Saxophone", "Trumpet", "Trombone", "Tuba", "Percussion", "Color Guard"];
 const studentYears = ["freshman", "sophomore", "junior", "senior"];
 
@@ -196,7 +196,9 @@ const getStatusStyles = (status) => {
     case 'needs-help': return { label: "Needs Help", color: "bg-red-500", textColor: "text-white", icon: AlertTriangle, pulse: true };
     case 'pending-approval': return { label: "Pending Approval", color: "bg-yellow-500", textColor: "text-white", icon: Clock, pulse: false };
     case 'ready': return { label: "Ready", color: "bg-teal-500", textColor: "text-white", icon: CheckCircle, pulse: false };
-    case 'not-started': default: return { label: "Not Started", color: "bg-gray-500", textColor: "text-white", icon: MapPin, pulse: false };
+    // Backward compatibility: map old "not-started" status to "ready"
+    case 'not-started':
+    default: return { label: "Ready", color: "bg-teal-500", textColor: "text-white", icon: CheckCircle, pulse: false };
   }
 };
 

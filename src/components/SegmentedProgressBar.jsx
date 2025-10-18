@@ -96,25 +96,26 @@ const LotSegment = ({ lot, getStatusStyles, index, totalLots }) => {
  * Main Segmented Progress Bar Component
  */
 const SegmentedProgressBar = ({ lots, getStatusStyles, stats }) => {
-  // Define the status order for grouping
-  const statusOrder = ['not-started', 'in-progress', 'needs-help', 'pending-approval', 'complete'];
-  
+  // Define the status order for grouping (removed 'not-started', replaced with 'ready')
+  const statusOrder = ['ready', 'in-progress', 'needs-help', 'pending-approval', 'complete'];
+
   // Group and sort lots by status
   const groupedLots = useMemo(() => {
     const grouped = {};
-    
+
     // Initialize groups
     statusOrder.forEach(status => {
       grouped[status] = [];
     });
-    
-    // Group lots by status
+
+    // Group lots by status (map old 'not-started' to 'ready' for backward compatibility)
     lots.forEach(lot => {
-      if (grouped[lot.status]) {
-        grouped[lot.status].push(lot);
+      const mappedStatus = lot.status === 'not-started' ? 'ready' : lot.status;
+      if (grouped[mappedStatus]) {
+        grouped[mappedStatus].push(lot);
       }
     });
-    
+
     // Flatten in the correct order
     return statusOrder.flatMap(status => grouped[status]);
   }, [lots]);

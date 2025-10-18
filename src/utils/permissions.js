@@ -132,6 +132,12 @@ export const permissions = {
   canViewStudents: (user) => {
     // Admins and volunteers can view students screen
     return user?.role === USER_ROLES.ADMIN || user?.role === USER_ROLES.VOLUNTEER;
+  },
+
+  // Database Management Permissions
+  canResetDatabase: (user) => {
+    // Only admins can reset the database (for testing/development)
+    return user?.role === USER_ROLES.ADMIN;
   }
 };
 

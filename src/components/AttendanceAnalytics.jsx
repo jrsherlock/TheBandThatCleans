@@ -30,11 +30,51 @@ const AttendanceAnalytics = ({ students }) => {
         sectionComparison: [],
         overallAttendanceRate: 0,
         totalActualAttendances: 0,
-        totalPossibleAttendances: 0
+        totalPossibleAttendances: 0,
+        numPastEvents: 0,
+        avgCleanupAttendance: 0
       };
     }
 
     const eventFields = ['event1', 'event2', 'event3', 'event4', 'event5', 'event6', 'event7'];
+
+    // Event dates mapping (based on ActualRoster column headers)
+    const eventDates = [
+      new Date('2025-08-31'), // Event 1: Aug. 31
+      new Date('2025-09-14'), // Event 2: Sept. 14
+      new Date('2025-09-28'), // Event 3: Sept. 28
+      new Date('2025-10-19'), // Event 4: Oct. 19
+      new Date('2025-10-26'), // Event 5: Oct. 26
+      new Date('2025-11-09'), // Event 6: Nov. 9
+      new Date('2025-11-23')  // Event 7: Nov. 23
+    ];
+
+    // Determine which events have already occurred (compare to today)
+    const today = new Date();
+    today.setHours(0, 0, 0, 0); // Reset time to midnight for accurate date comparison
+
+    const pastEventIndices = eventDates
+      .map((date, index) => ({ date, index }))
+      .filter(({ date }) => date < today)
+      .map(({ index }) => index);
+
+    const pastEventFields = pastEventIndices.map(i => eventFields[i]);
+    const numPastEvents = pastEventFields.length;
+
+    console.log('Event date calculation:', {
+      today: today.toISOString(),
+      eventDates: eventDates.map(d => d.toISOString()),
+      pastEventIndices,
+      pastEventFields,
+      numPastEvents
+    });
+
+    // Helper function to format event dates
+    const formatEventDate = (date) => {
+      const month = date.toLocaleDateString('en-US', { month: 'short' });
+      const day = date.getDate();
+      return `${month}. ${day}`;
+    };
 
     // Event-by-event attendance
     const eventAttendance = eventFields.map((field, index) => {
@@ -50,6 +90,7 @@ const AttendanceAnalytics = ({ students }) => {
       const eligible = total - excused; // Exclude excused students from denominator
       return {
         event: index + 1,
+        eventDate: formatEventDate(eventDates[index]),
         attended,
         excused,
         total,
@@ -59,6 +100,7 @@ const AttendanceAnalytics = ({ students }) => {
     });
 
     // Instrument comparison - Competition to see which instrument has highest attendance
+    // FIXED: Only count past events in the calculation
     const instrumentStats = {};
     students.forEach(s => {
       const instrument = s.instrument || 'Unknown';
@@ -71,7 +113,8 @@ const AttendanceAnalytics = ({ students }) => {
       }
       instrumentStats[instrument].totalStudents++;
 
-      eventFields.forEach(field => {
+      // Only iterate over past events, not all 7 events
+      pastEventFields.forEach(field => {
         const value = s[field];
         if (value === 'X' || value === 'x') {
           instrumentStats[instrument].totalAttended++;
@@ -97,6 +140,7 @@ const AttendanceAnalytics = ({ students }) => {
     })).sort((a, b) => b.avgAttendance - a.avgAttendance);
 
     // Section comparison
+    // FIXED: Only count past events, not all 7 events
     const sectionStats = {};
     students.forEach(s => {
       const section = s.section || 'Unknown';
@@ -104,9 +148,10 @@ const AttendanceAnalytics = ({ students }) => {
         sectionStats[section] = { total: 0, attended: 0 };
       }
       sectionStats[section].total++;
-      
+
       let studentAttended = 0;
-      eventFields.forEach(field => {
+      // Only count past events
+      pastEventFields.forEach(field => {
         if (s[field] === 'X' || s[field] === 'x') studentAttended++;
       });
       sectionStats[section].attended += studentAttended;
@@ -114,15 +159,18 @@ const AttendanceAnalytics = ({ students }) => {
 
     const sectionComparison = Object.entries(sectionStats).map(([section, stats]) => ({
       section,
-      avgAttendance: stats.total > 0 ? (stats.attended / (stats.total * 7) * 100).toFixed(1) : 0,
+      // Use numPastEvents instead of hardcoded 7
+      avgAttendance: stats.total > 0 ? (stats.attended / (stats.total * numPastEvents) * 100).toFixed(1) : 0,
       totalStudents: stats.total
     })).sort((a, b) => b.avgAttendance - a.avgAttendance);
 
     // Overall stats - calculate total attendances from all students
+    // FIXED: Only count past events, not all 7 events
     let totalActualAttendances = 0;
     let totalExcused = 0;
     students.forEach(s => {
-      eventFields.forEach(field => {
+      // Only count past events
+      pastEventFields.forEach(field => {
         const value = s[field];
         if (value === 'X' || value === 'x') {
           totalActualAttendances++;
@@ -132,10 +180,16 @@ const AttendanceAnalytics = ({ students }) => {
       });
     });
 
-    const totalPossibleAttendances = students.length * 7;
+    // Use numPastEvents instead of hardcoded 7
+    const totalPossibleAttendances = students.length * numPastEvents;
     const totalEligibleAttendances = totalPossibleAttendances - totalExcused;
     const overallAttendanceRate = totalEligibleAttendances > 0
       ? Math.round((totalActualAttendances / totalEligibleAttendances) * 100)
+      : 0;
+
+    // Calculate average cleanup attendance (average students per event that has occurred)
+    const avgCleanupAttendance = numPastEvents > 0
+      ? (totalActualAttendances / numPastEvents).toFixed(1)
       : 0;
 
     return {
@@ -144,7 +198,9 @@ const AttendanceAnalytics = ({ students }) => {
       sectionComparison,
       overallAttendanceRate,
       totalActualAttendances,
-      totalPossibleAttendances
+      totalPossibleAttendances,
+      numPastEvents,
+      avgCleanupAttendance
     };
   }, [students]);
 
@@ -210,9 +266,9 @@ const AttendanceAnalytics = ({ students }) => {
           </div>
           <div className="text-center">
             <div className="text-3xl font-bold text-green-600 dark:text-green-400">
-              {analytics.totalActualAttendances}
+              {analytics.avgCleanupAttendance}
             </div>
-            <div className="text-sm text-gray-600 dark:text-gray-400">Total Attendances</div>
+            <div className="text-sm text-gray-600 dark:text-gray-400">Average Cleanup Attendance - YTD</div>
           </div>
           <div className="text-center">
             <div className="text-3xl font-bold text-purple-600 dark:text-purple-400">
@@ -235,7 +291,7 @@ const AttendanceAnalytics = ({ students }) => {
               <div key={event.event} className="space-y-1">
                 <div className="flex justify-between text-sm">
                   <span className="font-medium text-gray-700 dark:text-gray-300">
-                    Event {event.event}
+                    Event {event.event} - {event.eventDate}
                   </span>
                   <span className="text-gray-600 dark:text-gray-400">
                     {event.attended} / {event.eligible} ({event.percentage}%)

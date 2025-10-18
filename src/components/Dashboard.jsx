@@ -6,13 +6,14 @@
 import { useState, useMemo } from 'react';
 import {
   CheckCircle, Users, MapPin, AlertTriangle, Download, Bell,
-  Send, RefreshCw, Music, Sparkles
+  Send, RefreshCw, Music, Sparkles, Trash2
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { motion } from 'framer-motion';
 import { toast } from 'react-hot-toast';
 import { isAdmin, isVolunteer, isStudent } from '../utils/permissions.js';
 import SegmentedProgressBar from './SegmentedProgressBar.jsx';
+import apiService from '../../api-service.js';
 
 const MotionDiv = motion.div;
 
@@ -78,6 +79,8 @@ const AdminDashboard = ({ lots, students, stats, onBulkStatusUpdate, onSendNotif
   const [selectedLots, setSelectedLots] = useState([]);
   const [notificationMessage, setNotificationMessage] = useState("");
   const [showNotificationPanel, setShowNotificationPanel] = useState(false);
+  const [showResetConfirmation, setShowResetConfirmation] = useState(false);
+  const [isResetting, setIsResetting] = useState(false);
 
   const lotsNeedingHelp = lots ? lots.filter(l => l.status === 'needs-help') : [];
   const pendingApprovalLots = lots.filter(l => l.status === 'pending-approval');
@@ -112,6 +115,49 @@ const AdminDashboard = ({ lots, students, stats, onBulkStatusUpdate, onSendNotif
     setNotificationMessage("");
     setShowNotificationPanel(false);
     toast.success(`Notification sent to ${recipientIds.length} students`);
+  };
+
+  // Reset Database handler
+  const handleResetDatabase = async () => {
+    setShowResetConfirmation(false);
+    setIsResetting(true);
+
+    try {
+      toast.loading('Resetting database...', { id: 'reset-db' });
+
+      const result = await apiService.resetDatabase();
+
+      toast.dismiss('reset-db');
+
+      // Build success message
+      let successMessage = '✅ Database reset successfully!\n\n';
+
+      if (result.resetSheets && result.resetSheets.length > 0) {
+        successMessage += `Cleared sheets: ${result.resetSheets.join(', ')}\n`;
+      }
+
+      if (result.clearedLotsColumns && result.clearedLotsColumns.length > 0) {
+        successMessage += `Cleared Lots columns: ${result.clearedLotsColumns.join(', ')}\n`;
+      }
+
+      if (result.preservedSheets && result.preservedSheets.length > 0) {
+        successMessage += `Preserved: ${result.preservedSheets.join(', ')}`;
+      }
+
+      toast.success(successMessage, { duration: 6000 });
+
+      // Reload the page to refresh all data
+      setTimeout(() => {
+        window.location.reload();
+      }, 1500);
+
+    } catch (error) {
+      toast.dismiss('reset-db');
+      toast.error(error.message || 'Failed to reset database. Please try again.');
+      console.error('Reset database error:', error);
+    } finally {
+      setIsResetting(false);
+    }
   };
 
   return (
@@ -316,6 +362,7 @@ const AdminDashboard = ({ lots, students, stats, onBulkStatusUpdate, onSendNotif
               <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Hold Ctrl/Cmd to select multiple lots</p>
             </div>
             <div className="space-y-2">
+              <button onClick={() => handleBulkUpdate("ready")} disabled={selectedLots.length === 0} className="w-full px-4 py-2 bg-teal-600 dark:bg-teal-500 text-white rounded-lg hover:bg-teal-700 dark:hover:bg-teal-600 disabled:bg-gray-300 dark:disabled:bg-gray-600 disabled:cursor-not-allowed transition-colors">Set to Ready</button>
               <button onClick={() => handleBulkUpdate("in-progress")} disabled={selectedLots.length === 0} className="w-full px-4 py-2 bg-blue-600 dark:bg-blue-500 text-white rounded-lg hover:bg-blue-700 dark:hover:bg-blue-600 disabled:bg-gray-300 dark:disabled:bg-gray-600 disabled:cursor-not-allowed transition-colors">Set to In Progress</button>
               <button onClick={() => handleBulkUpdate("needs-help")} disabled={selectedLots.length === 0} className="w-full px-4 py-2 bg-red-600 dark:bg-red-500 text-white rounded-lg hover:bg-red-700 dark:hover:bg-red-600 disabled:bg-gray-300 dark:disabled:bg-gray-600 disabled:cursor-not-allowed transition-colors">Mark as Needs Help</button>
               <button onClick={() => handleBulkUpdate("pending-approval")} disabled={selectedLots.length === 0} className="w-full px-4 py-2 bg-yellow-600 dark:bg-yellow-500 text-white rounded-lg hover:bg-yellow-700 dark:hover:bg-yellow-600 disabled:bg-gray-300 dark:disabled:bg-gray-600 disabled:cursor-not-allowed transition-colors">Set Pending Approval</button>
@@ -375,7 +422,88 @@ const AdminDashboard = ({ lots, students, stats, onBulkStatusUpdate, onSendNotif
             Refresh Data
           </button>
         </div>
+
+        {/* Reset Database Button - Development/Testing Only */}
+        <div className="mt-6 pt-6 border-t border-gray-200 dark:border-gray-700">
+          <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-4">
+            <div className="flex items-start gap-3 mb-3">
+              <AlertTriangle className="text-red-600 dark:text-red-400 flex-shrink-0 mt-0.5" size={20} />
+              <div className="flex-1">
+                <h4 className="font-semibold text-red-800 dark:text-red-200 mb-1">Development Tools</h4>
+                <p className="text-sm text-red-700 dark:text-red-300">
+                  Reset database to clear all student check-ins, attendance logs, event configuration, and lot student counts.
+                  Parking lot structure and master roster will be preserved.
+                </p>
+              </div>
+            </div>
+            <button
+              onClick={() => setShowResetConfirmation(true)}
+              disabled={isResetting}
+              className="w-full px-4 py-2 bg-red-600 dark:bg-red-500 text-white rounded-lg hover:bg-red-700 dark:hover:bg-red-600 disabled:bg-gray-400 dark:disabled:bg-gray-600 disabled:cursor-not-allowed transition-colors flex items-center justify-center gap-2"
+            >
+              <Trash2 size={16} />
+              {isResetting ? 'Resetting...' : 'Reset Database'}
+            </button>
+          </div>
+        </div>
       </div>
+
+      {/* Reset Confirmation Dialog */}
+      {showResetConfirmation && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 dark:bg-opacity-70 flex items-center justify-center p-4 z-50">
+          <MotionDiv
+            initial={{ scale: 0.9, opacity: 0 }}
+            animate={{ scale: 1, opacity: 1 }}
+            exit={{ scale: 0.9, opacity: 0 }}
+            className="bg-white dark:bg-gray-800 rounded-lg p-6 w-full max-w-md transition-colors duration-200"
+          >
+            <div className="flex items-start gap-3 mb-4">
+              <div className="bg-red-100 dark:bg-red-900/40 p-2 rounded-lg">
+                <AlertTriangle className="text-red-600 dark:text-red-400" size={24} />
+              </div>
+              <div className="flex-1">
+                <h3 className="text-lg font-bold text-gray-900 dark:text-white mb-2">
+                  Reset Database?
+                </h3>
+                <p className="text-sm text-gray-600 dark:text-gray-400 mb-3">
+                  This will permanently delete all data from:
+                </p>
+                <ul className="text-sm text-gray-600 dark:text-gray-400 space-y-1 mb-3">
+                  <li>• <strong>Students</strong> - All check-in/check-out data</li>
+                  <li>• <strong>AttendanceLog</strong> - All attendance records</li>
+                  <li>• <strong>EventConfig</strong> - Event settings</li>
+                  <li>• <strong>Lots (counts only)</strong> - AI/manual student counts, photos, comments</li>
+                </ul>
+                <p className="text-sm text-gray-600 dark:text-gray-400 mb-3">
+                  The following will be <strong className="text-green-600 dark:text-green-400">preserved</strong>:
+                </p>
+                <ul className="text-sm text-gray-600 dark:text-gray-400 space-y-1 mb-3">
+                  <li>• <strong>Lots (structure)</strong> - Lot names, zones, IDs, coordinates</li>
+                  <li>• <strong>ActualRoster</strong> - Master student roster</li>
+                </ul>
+                <p className="text-sm font-semibold text-red-600 dark:text-red-400">
+                  ⚠️ This action cannot be undone!
+                </p>
+              </div>
+            </div>
+
+            <div className="flex gap-3">
+              <button
+                onClick={() => setShowResetConfirmation(false)}
+                className="flex-1 px-4 py-2 bg-gray-200 dark:bg-gray-700 text-gray-900 dark:text-gray-100 rounded-lg hover:bg-gray-300 dark:hover:bg-gray-600 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleResetDatabase}
+                className="flex-1 px-4 py-2 bg-red-600 dark:bg-red-500 text-white rounded-lg hover:bg-red-700 dark:hover:bg-red-600 transition-colors font-semibold"
+              >
+                Yes, Reset Database
+              </button>
+            </div>
+          </MotionDiv>
+        </div>
+      )}
     </div>
   );
 };

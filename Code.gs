@@ -75,7 +75,7 @@ const SHEETS = {
 };
 
 // Valid status values for lots
-const VALID_LOT_STATUSES = ["not-started", "in-progress", "needs-help", "pending-approval", "complete"];
+const VALID_LOT_STATUSES = ["ready", "in-progress", "needs-help", "pending-approval", "complete"];
 
 // Mock API key for basic authentication (replace with proper auth in production)
 const MOCK_API_KEY = "tbtc-director-key-2024";
@@ -143,9 +143,11 @@ function doGet(e) {
           return handleSignInSheetUpload(payload);
         case "RECONCILE_PLACEHOLDER":
           return handleReconcilePlaceholder(payload);
+        case "RESET_DATABASE":
+          return handleResetDatabase(payload);
         default:
           return createJsonResponse({
-            error: `Invalid update type: ${type}. Supported: UPDATE_LOT_STATUS, UPDATE_BULK_STATUS, UPDATE_LOT_DETAILS, UPDATE_STUDENT_STATUS, UPDATE_EVENT_CONFIG, OCR_UPLOAD, UPLOAD_SIGNIN_SHEET, RECONCILE_PLACEHOLDER`
+            error: `Invalid update type: ${type}. Supported: UPDATE_LOT_STATUS, UPDATE_BULK_STATUS, UPDATE_LOT_DETAILS, UPDATE_STUDENT_STATUS, UPDATE_EVENT_CONFIG, OCR_UPLOAD, UPLOAD_SIGNIN_SHEET, RECONCILE_PLACEHOLDER, RESET_DATABASE`
           }, 400);
       }
     }
@@ -226,9 +228,11 @@ function doPost(e) {
         return handleSignInSheetUpload(payload);
       case "RECONCILE_PLACEHOLDER":
         return handleReconcilePlaceholder(payload);
+      case "RESET_DATABASE":
+        return handleResetDatabase(payload);
       default:
         return createJsonResponse({
-          error: `Invalid POST type: ${type}. Supported: UPDATE_LOT_STATUS, UPDATE_BULK_STATUS, UPDATE_LOT_DETAILS, UPDATE_STUDENT_STATUS, UPDATE_EVENT_CONFIG, OCR_UPLOAD, UPLOAD_SIGNIN_SHEET, RECONCILE_PLACEHOLDER`
+          error: `Invalid POST type: ${type}. Supported: UPDATE_LOT_STATUS, UPDATE_BULK_STATUS, UPDATE_LOT_DETAILS, UPDATE_STUDENT_STATUS, UPDATE_EVENT_CONFIG, OCR_UPLOAD, UPLOAD_SIGNIN_SHEET, RECONCILE_PLACEHOLDER, RESET_DATABASE`
         }, 400);
     }
   } catch (error) {
@@ -1102,6 +1106,7 @@ function handleSignInSheetUpload(payload) {
 
     // Find column indices
     const idIndex = headers.indexOf("id");
+    const statusIndex = headers.indexOf("status");
     const photoIndex = headers.indexOf("signUpSheetPhoto");
     const aiCountIndex = headers.indexOf("aiStudentCount");
     const aiConfidenceIndex = headers.indexOf("aiConfidence");
@@ -1112,6 +1117,7 @@ function handleSignInSheetUpload(payload) {
     const commentIndex = headers.indexOf("comment");
     const lastUpdatedIndex = headers.indexOf("lastUpdated");
     const updatedByIndex = headers.indexOf("updatedBy");
+    const actualStartTimeIndex = headers.indexOf("actualStartTime");
 
     const currentTime = new Date().toISOString();
     let lotFound = false;
@@ -1183,6 +1189,20 @@ function handleSignInSheetUpload(payload) {
             ? `${existingComment}\n[AI Check-in ${currentTime}]: ${payload.notes}`
             : `[AI Check-in ${currentTime}]: ${payload.notes}`;
           data[i][commentIndex] = newComment;
+        }
+
+        // AUTOMATIC STATUS TRANSITION: Ready → In Progress
+        // When a count is submitted (AI or manual), automatically transition from "ready" to "in-progress"
+        // Only transition if current status is "ready" - don't override other statuses
+        const currentStatus = data[i][statusIndex];
+        if (currentStatus === 'ready') {
+          data[i][statusIndex] = 'in-progress';
+          // Set actualStartTime when transitioning to in-progress
+          if (!data[i][actualStartTimeIndex]) {
+            data[i][actualStartTimeIndex] = currentTime;
+          }
+          logInfo("handleSignInSheetUpload",
+            `Auto-transitioned lot ${lotIdToUpdate} from 'ready' to 'in-progress'`);
         }
 
         // Update metadata
@@ -1680,6 +1700,150 @@ function handleGetReport() {
   } catch (error) {
     logError("handleGetReport", error);
     return createJsonResponse({ error: error.toString() }, 500);
+  }
+}
+
+/**
+ * Handles resetting the database for testing/development purposes
+ * Clears data from Students, AttendanceLog, and EventConfig tabs
+ * Resets lot statuses to "ready" and clears student count/timing data from Lots sheet
+ * Preserves ActualRoster completely
+ */
+function handleResetDatabase(payload) {
+  try {
+    logInfo("handleResetDatabase", "Starting database reset operation");
+
+    const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+
+    // Track which sheets were reset
+    const resetSheets = [];
+    const clearedColumns = [];
+
+    // 1. Reset Students sheet (clear all data rows, keep headers)
+    const studentsSheet = ss.getSheetByName(SHEETS.STUDENTS.name);
+    if (studentsSheet) {
+      const lastRow = studentsSheet.getLastRow();
+      if (lastRow > 1) {
+        // Delete all rows except header
+        studentsSheet.deleteRows(2, lastRow - 1);
+        resetSheets.push("Students");
+        logInfo("handleResetDatabase", `Cleared ${lastRow - 1} rows from Students sheet`);
+      } else {
+        logInfo("handleResetDatabase", "Students sheet already empty");
+      }
+    }
+
+    // 2. Reset AttendanceLog sheet (clear all data rows, keep headers)
+    const attendanceSheet = ss.getSheetByName(SHEETS.ATTENDANCE_LOG.name);
+    if (attendanceSheet) {
+      const lastRow = attendanceSheet.getLastRow();
+      if (lastRow > 1) {
+        // Delete all rows except header
+        attendanceSheet.deleteRows(2, lastRow - 1);
+        resetSheets.push("AttendanceLog");
+        logInfo("handleResetDatabase", `Cleared ${lastRow - 1} rows from AttendanceLog sheet`);
+      } else {
+        logInfo("handleResetDatabase", "AttendanceLog sheet already empty");
+      }
+    }
+
+    // 3. Reset EventConfig sheet (clear all data rows, keep headers)
+    const eventConfigSheet = ss.getSheetByName(SHEETS.EVENT_CONFIG.name);
+    if (eventConfigSheet) {
+      const lastRow = eventConfigSheet.getLastRow();
+      if (lastRow > 1) {
+        // Delete all rows except header
+        eventConfigSheet.deleteRows(2, lastRow - 1);
+        resetSheets.push("EventConfig");
+        logInfo("handleResetDatabase", `Cleared ${lastRow - 1} rows from EventConfig sheet`);
+      } else {
+        logInfo("handleResetDatabase", "EventConfig sheet already empty");
+      }
+    }
+
+    // 4. Reset Lots sheet: set all statuses to "ready" and clear timing/count data
+    const lotsSheet = ss.getSheetByName(SHEETS.LOTS.name);
+    if (lotsSheet) {
+      const data = lotsSheet.getDataRange().getValues();
+      const headers = data[0];
+
+      // Find column indices for fields to reset
+      const columnsToReset = [
+        'lastUpdated',        // Column H - clear
+        'updatedBy',          // Column I - clear
+        'actualStartTime',    // Column J - clear
+        'completedTime',      // Column K - clear
+        'aiStudentCount',     // AI-related fields
+        'manualCountOverride',
+        'aiConfidence',
+        'aiAnalysisTimestamp',
+        'countSource',
+        'countEnteredBy',
+        'signUpSheetPhoto',
+        'comment'
+      ];
+
+      const columnIndices = {};
+      columnsToReset.forEach(colName => {
+        const index = headers.indexOf(colName);
+        if (index !== -1) {
+          columnIndices[colName] = index;
+        }
+      });
+
+      // Find status column index
+      const statusIndex = headers.indexOf('status');
+
+      // Reset status to "ready" and clear specified columns for all data rows
+      let clearedCount = 0;
+      let statusResetCount = 0;
+      for (let i = 1; i < data.length; i++) {
+        // Set status to "ready"
+        if (statusIndex !== -1 && data[i][statusIndex] !== 'ready') {
+          data[i][statusIndex] = 'ready';
+          statusResetCount++;
+        }
+
+        // Clear the specified columns
+        Object.entries(columnIndices).forEach(([colName, colIndex]) => {
+          if (data[i][colIndex] !== '') {
+            data[i][colIndex] = '';
+            clearedCount++;
+          }
+        });
+      }
+
+      // Write updated data back to sheet
+      if (clearedCount > 0 || statusResetCount > 0) {
+        lotsSheet.getRange(1, 1, data.length, data[0].length).setValues(data);
+        clearedColumns.push(...Object.keys(columnIndices));
+        logInfo("handleResetDatabase",
+          `Reset ${statusResetCount} lot statuses to "ready" and cleared ${clearedCount} cells from Lots sheet (columns: ${Object.keys(columnIndices).join(', ')})`);
+      } else {
+        logInfo("handleResetDatabase", "Lots sheet already in reset state");
+      }
+    }
+
+    // NOTE: We do NOT touch ActualRoster sheet as requested
+
+    logInfo("handleResetDatabase",
+      `Database reset complete. Reset sheets: ${resetSheets.join(", ")}. Cleared Lots columns: ${clearedColumns.join(", ")}`);
+
+    return createJsonResponse({
+      success: true,
+      message: "Database reset successfully - all lots set to 'ready' status",
+      resetSheets: resetSheets,
+      clearedLotsColumns: clearedColumns,
+      preservedSheets: ["ActualRoster"],
+      preservedLotsData: ["id", "name", "zone", "coordinates", "etc."],
+      timestamp: new Date().toISOString()
+    });
+
+  } catch (error) {
+    logError("handleResetDatabase", error);
+    return createJsonResponse({
+      error: "Failed to reset database: " + error.toString()
+    }, 500);
   }
 }
 
