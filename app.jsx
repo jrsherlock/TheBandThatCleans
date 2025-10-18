@@ -117,7 +117,7 @@ const lotNames = [
 // Fallback sections for mock data only (real data comes from Google Sheet)
 const mockSections = ["Zone 1", "Zone 2", "Zone 3", "Zone 4", "Zone 5"];
 const priorities = ["high", "medium", "low"];
-const statuses = ["not-started", "in-progress", "needs-help", "pending-approval", "complete"];
+const statuses = ["not-started", "ready", "in-progress", "needs-help", "pending-approval", "complete"];
 const studentInstruments = ["Flute", "Piccolo", "Clarinet", "Saxophone", "Trumpet", "Trombone", "Tuba", "Percussion", "Color Guard"];
 const studentYears = ["freshman", "sophomore", "junior", "senior"];
 
@@ -195,7 +195,8 @@ const getStatusStyles = (status) => {
     case 'in-progress': return { label: "In Progress", color: "bg-blue-500", textColor: "text-white", icon: Play, pulse: true };
     case 'needs-help': return { label: "Needs Help", color: "bg-red-500", textColor: "text-white", icon: AlertTriangle, pulse: true };
     case 'pending-approval': return { label: "Pending Approval", color: "bg-yellow-500", textColor: "text-white", icon: Clock, pulse: false };
-    case 'not-started': default: return { label: "Ready", color: "bg-gray-500", textColor: "text-white", icon: MapPin, pulse: false };
+    case 'ready': return { label: "Ready", color: "bg-teal-500", textColor: "text-white", icon: CheckCircle, pulse: false };
+    case 'not-started': default: return { label: "Not Started", color: "bg-gray-500", textColor: "text-white", icon: MapPin, pulse: false };
   }
 };
 
@@ -1093,11 +1094,11 @@ const App = () => {
   const LoadingSpinner = () => (
     <div className="flex items-center justify-center min-h-screen bg-gradient-to-br from-blue-50 via-white to-purple-50 dark:from-gray-900 dark:via-gray-800 dark:to-gray-900">
       <div className="text-center">
-        {/* TBTC Logo */}
+        {/* TBTC Logo - Increased size for better visibility */}
         <img
           src={TBTCLogo}
           alt="The Band That Cleans Logo"
-          className="h-32 w-32 sm:h-40 sm:w-40 md:h-48 md:w-48 object-contain mx-auto mb-6 animate-pulse"
+          className="h-48 w-48 sm:h-56 sm:w-56 md:h-64 md:w-64 object-contain mx-auto mb-6 animate-pulse"
         />
         <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 dark:border-blue-400 mx-auto mb-4"></div>
         <p className="text-gray-600 dark:text-gray-300">Loading TBTC platform...</p>
@@ -1109,11 +1110,11 @@ const App = () => {
   const ErrorDisplay = ({ error, onRetry }) => (
     <div className="flex items-center justify-center min-h-screen bg-gradient-to-br from-blue-50 via-white to-purple-50 dark:from-gray-900 dark:via-gray-800 dark:to-gray-900">
       <div className="text-center max-w-md mx-auto p-6">
-        {/* TBTC Logo */}
+        {/* TBTC Logo - Increased size for better visibility */}
         <img
           src={TBTCLogo}
           alt="The Band That Cleans Logo"
-          className="h-28 w-28 sm:h-32 sm:w-32 md:h-40 md:w-40 object-contain mx-auto mb-4"
+          className="h-40 w-40 sm:h-48 sm:w-48 md:h-56 md:w-56 object-contain mx-auto mb-4"
         />
         <AlertTriangle className="h-12 w-12 text-red-500 dark:text-red-400 mx-auto mb-4" />
         <h2 className="text-xl font-semibold text-gray-900 dark:text-white mb-2">Failed to Load</h2>
