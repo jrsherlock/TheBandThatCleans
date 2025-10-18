@@ -134,6 +134,12 @@ export const permissions = {
     return user?.role === USER_ROLES.ADMIN || user?.role === USER_ROLES.VOLUNTEER;
   },
 
+  // AR Game Permissions
+  canPlayARGame: (user) => {
+    // Only students can access the AR game
+    return user?.role === USER_ROLES.STUDENT;
+  },
+
   // Database Management Permissions
   canResetDatabase: (user) => {
     // Only admins can reset the database (for testing/development)

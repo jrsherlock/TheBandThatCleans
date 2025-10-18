@@ -2,7 +2,7 @@ import React, { useState, useMemo, useEffect, useRef, useCallback, createContext
 import {
   CheckCircle, Clock, Users, MapPin, AlertTriangle, Download, Bell, X,
   Save, MessageSquare, Image, RefreshCw, Filter, PenLine, Play, Settings,
-  Calendar, Eye, Search, Send, Camera, Loader2, Sun, Moon
+  Calendar, Eye, Search, Send, Camera, Loader2, Sun, Moon, Gamepad2
 } from 'lucide-react';
 import { BarChart, Bar, PieChart, Pie, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell } from 'recharts';
 import { format } from 'date-fns';
@@ -21,6 +21,7 @@ import QRCodeRouter from './src/components/QRCodeRouter.jsx';
 import CheckOutToggle from './src/components/CheckOutToggle.jsx';
 import RefreshButton from './src/components/RefreshButton.jsx';
 import SyncStatusIndicator from './src/components/SyncStatusIndicator.jsx';
+import ARGameLauncher from './src/components/ARGameLauncher.jsx';
 import { hasPermission } from './src/utils/permissions.js';
 import { getDefaultTab } from './src/utils/roleHelpers.jsx';
 import { usePolling } from './src/hooks/usePolling.js';
@@ -267,85 +268,36 @@ const App = () => {
   }, []);
 
   // Load initial data from API
+  // --- INITIAL DATA LOADING ---
+  // PERFORMANCE OPTIMIZATION: Removed duplicate initial data fetch
+  // The polling system (usePolling hook below) now handles ALL data fetching,
+  // including the initial load. This eliminates the duplicate API calls that
+  // were happening on page load (initial useEffect + polling's immediate fetch).
+  //
+  // The polling system executes immediately on mount, so there's no delay in
+  // loading data. The loading state is managed by the polling hook.
+  //
+  // Benefits:
+  // - Reduces initial API calls from 4 to 2 (50% reduction)
+  // - Single source of truth for data fetching
+  // - Consistent caching behavior
+  // - Simpler code maintenance
+
   useEffect(() => {
-    const loadInitialData = async () => {
+    // Load event configuration on mount (separate from lots/students data)
+    const loadEventConfig = async () => {
       try {
-        setIsLoading(true);
-        setError(null);
-
-        // Load main data
-        const data = await apiService.fetchInitialData();
-
-        console.log('🔍 API Data Debug: Received data from API', {
-          lotsCount: data.lots?.length || 0,
-          studentsCount: data.students?.length || 0,
-          firstLot: data.lots?.[0],
-          sampleLotFields: data.lots?.[0] ? Object.keys(data.lots[0]) : []
-        });
-
-        if (data.lots) {
-          // Initialize assignedStudents property for each lot
-          const lotsWithAssignedStudents = data.lots.map(lot => ({
-            ...lot,
-            assignedStudents: lot.assignedStudents || []
-          }));
-
-          console.log('🔍 API Data Debug: Setting lots state', {
-            count: lotsWithAssignedStudents.length,
-            firstLotWithZone: lotsWithAssignedStudents[0]
-          });
-
-          setLots(lotsWithAssignedStudents);
-        }
-
-        if (data.students) {
-          setStudents(data.students);
-        }
-
-        // After both lots and students are loaded, populate assignedStudents arrays
-        if (data.lots && data.students) {
-          setLots(prevLots =>
-            prevLots.map(lot => ({
-              ...lot,
-              assignedStudents: data.students
-                .filter(student => student.assignedLot === lot.id)
-                .map(student => student.id)
-            }))
-          );
-        }
-
-        // Load event configuration
-        try {
-          const config = await apiService.getEventConfig();
-          setEventConfig(config);
-          setCheckOutEnabled(config.checkOutEnabled || false);
-        } catch (configError) {
-          console.error('Failed to load event config:', configError);
-          // Continue with default config
-          setCheckOutEnabled(false);
-        }
-
-        toast.success('Data loaded successfully!');
-
-      } catch (error) {
-        console.error('Failed to load initial data:', error);
-        setError(error.message || 'Failed to load data');
-
-        // Fallback to mock data for development
-        if (error.message?.includes('BASE_URL')) {
-          toast.error('API not configured. Using mock data for development.');
-          setLots(initialLots);
-          setStudents(initialStudents);
-        } else {
-          toast.error('Failed to load data. Please check your connection.');
-        }
-      } finally {
-        setIsLoading(false);
-        setIsInitialLoad(false);
+        const config = await apiService.getEventConfig();
+        setEventConfig(config);
+        setCheckOutEnabled(config.checkOutEnabled || false);
+      } catch (configError) {
+        console.error('Failed to load event config:', configError);
+        // Continue with default config
+        setCheckOutEnabled(false);
       }
     };
 
-    loadInitialData();
+    loadEventConfig();
   }, []);
 
   // --- REAL-TIME POLLING INTEGRATION ---
@@ -354,8 +306,11 @@ const App = () => {
   const previousDataRef = useRef({ lots: [], students: [] });
 
   // Polling fetch function
-  const fetchPollingData = useCallback(async () => {
-    return await apiService.fetchInitialData();
+  // For automatic polling, use cache (bypassCache=false)
+  // For manual refresh, bypass cache (bypassCache=true) to force fresh data
+  const fetchPollingData = useCallback(async (bypassCache = false) => {
+    console.log(`[Polling] fetchPollingData called with bypassCache=${bypassCache}`);
+    return await apiService.fetchInitialData(bypassCache);
   }, []);
 
   // Determine if data has changed (to prevent unnecessary re-renders)
@@ -416,7 +371,8 @@ const App = () => {
     console.log('[Polling] handlePollingSuccess called', {
       isManual,
       lotsCount: data?.lots?.length,
-      studentsCount: data?.students?.length
+      studentsCount: data?.students?.length,
+      isInitialLoad
     });
 
     if (!data || !data.lots || !data.students) {
@@ -438,6 +394,14 @@ const App = () => {
     setLots(lotsWithAssignedStudents);
     setStudents(data.students);
 
+    // If this is the initial load, mark it as complete
+    if (isInitialLoad) {
+      console.log('[Polling] Initial load complete');
+      setIsInitialLoad(false);
+      setIsLoading(false);
+      toast.success('Data loaded successfully!');
+    }
+
     // Store for next comparison
     previousDataRef.current = {
       lots: lotsWithAssignedStudents,
@@ -456,11 +420,29 @@ const App = () => {
       // Note: We already updated state, this is just for notification
       console.log('[Polling] Automatic poll - checking if notification needed');
     }
-  }, []);
+  }, [isInitialLoad]);
 
   // Handle polling errors
   const handlePollingError = useCallback((error, isManual) => {
     console.error('[Polling] Error:', error);
+
+    // If this is the initial load, handle it specially
+    if (isInitialLoad) {
+      console.error('[Polling] Initial load failed:', error);
+      setIsInitialLoad(false);
+      setIsLoading(false);
+      setError(error.message || 'Failed to load data');
+
+      // Fallback to mock data for development
+      if (error.message?.includes('BASE_URL')) {
+        toast.error('API not configured. Using mock data for development.');
+        setLots(initialLots);
+        setStudents(initialStudents);
+      } else {
+        toast.error('Failed to load data. Please check your connection.');
+      }
+      return;
+    }
 
     // Only show error toast for manual refresh
     if (isManual) {
@@ -483,7 +465,7 @@ const App = () => {
     timeout: POLLING_TIMEOUT_MS,
     maxRetries: MAX_RETRY_ATTEMPTS,
     retryBackoff: RETRY_BACKOFF_MS,
-    enabled: !isInitialLoad && !isQRCodeRoute, // Don't poll during initial load or on QR routes
+    enabled: !isQRCodeRoute, // Polling handles initial load now, only disable on QR routes
     onSuccess: handlePollingSuccess,
     onError: handlePollingError,
     shouldUpdate: shouldUpdateData
@@ -1022,12 +1004,13 @@ const App = () => {
     }
   };
 
-  // Navigation Setup - Consolidated to 3 tabs for all users
+  // Navigation Setup - Consolidated to 4 tabs for all users
   const navItems = () => {
     const allItems = [
       { id: "dashboard", label: "Dashboard", icon: Calendar, requiredPermission: "canViewDashboard" },
       { id: "lots", label: "Parking Lots", icon: MapPin, requiredPermission: "canViewParkingLots" },
       { id: "students", label: "Students", icon: Users, requiredPermission: "canViewStudents" },
+      { id: "argame", label: "AR Game", icon: Gamepad2, requiredPermission: "canPlayARGame" }, // Students only
     ];
 
     // Filter items based on permissions
@@ -1089,6 +1072,9 @@ const App = () => {
           onStudentUpdate={handleStudentUpdate}
         />
       </>
+    ),
+    argame: (
+      <ARGameLauncher />
     ),
   };
 

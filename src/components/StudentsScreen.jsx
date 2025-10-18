@@ -13,6 +13,7 @@ import { hasPermission } from '../utils/permissions.js';
 import { isReadOnly } from '../utils/roleHelpers.jsx';
 import { ProtectedButton, ReadOnlyBadge } from './ProtectedComponents.jsx';
 import AttendanceAnalytics from './AttendanceAnalytics.jsx';
+import StudentDetailsModal from './StudentDetailsModal.jsx';
 
 const MotionDiv = motion.div;
 
@@ -106,6 +107,7 @@ const StudentsScreen = ({ students, currentUser, onStudentUpdate, lots = [] }) =
   const [sortColumn, setSortColumn] = useState("name");
   const [sortDirection, setSortDirection] = useState("asc");
   const [showAnalytics, setShowAnalytics] = useState(false);
+  const [selectedStudentId, setSelectedStudentId] = useState(null);
 
   const canCheckIn = hasPermission(currentUser, 'canCheckInStudents');
   const canView = hasPermission(currentUser, 'canViewStudentRoster');
@@ -532,8 +534,9 @@ const StudentsScreen = ({ students, currentUser, onStudentUpdate, lots = [] }) =
                     initial={{ opacity: 0 }}
                     animate={{ opacity: 1 }}
                     transition={{ delay: index * 0.01 }}
+                    onClick={() => setSelectedStudentId(student.id)}
                     className={`
-                      transition-colors hover:bg-gray-50 dark:hover:bg-gray-700/50
+                      transition-colors hover:bg-gray-50 dark:hover:bg-gray-700/50 cursor-pointer
                       ${student.checkedIn
                         ? 'bg-green-50/30 dark:bg-green-900/10'
                         : 'bg-white dark:bg-gray-800'
@@ -628,7 +631,10 @@ const StudentsScreen = ({ students, currentUser, onStudentUpdate, lots = [] }) =
                     {canCheckIn && (
                       <td className="px-4 py-3 text-center">
                         <button
-                          onClick={() => handleManualCheckIn(student.id, student.checkedIn)}
+                          onClick={(e) => {
+                            e.stopPropagation(); // Prevent row click
+                            handleManualCheckIn(student.id, student.checkedIn);
+                          }}
                           className={`
                             px-3 py-1 rounded text-xs font-medium transition-colors
                             ${student.checkedIn
@@ -660,6 +666,15 @@ const StudentsScreen = ({ students, currentUser, onStudentUpdate, lots = [] }) =
           </tbody>
         </table>
       </div>
+
+      {/* Student Details Modal */}
+      {selectedStudentId && (
+        <StudentDetailsModal
+          student={students.find(s => s.id === selectedStudentId)}
+          lots={lots}
+          onClose={() => setSelectedStudentId(null)}
+        />
+      )}
     </div>
   );
 };

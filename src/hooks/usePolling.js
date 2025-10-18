@@ -48,13 +48,16 @@ export const usePolling = (fetchFunction, options = {}) => {
 
   /**
    * Fetch data with timeout support
+   * @param {number} timeoutMs - Timeout in milliseconds
+   * @param {boolean} bypassCache - Whether to bypass cache (for manual refresh)
    */
-  const fetchWithTimeout = useCallback(async (timeoutMs) => {
+  const fetchWithTimeout = useCallback(async (timeoutMs, bypassCache = false) => {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
 
     try {
-      const result = await fetchFunction({ signal: controller.signal });
+      // Pass bypassCache to fetchFunction
+      const result = await fetchFunction(bypassCache);
       clearTimeout(timeoutId);
       return result;
     } catch (error) {
@@ -68,6 +71,7 @@ export const usePolling = (fetchFunction, options = {}) => {
 
   /**
    * Execute a single poll
+   * @param {boolean} isManual - Whether this is a manual refresh (bypasses cache)
    */
   const executePoll = useCallback(async (isManual = false) => {
     console.log('[usePolling] executePoll called', { isManual, isMounted: isMountedRef.current, isTabVisible: isTabVisibleRef.current });
@@ -85,12 +89,14 @@ export const usePolling = (fetchFunction, options = {}) => {
 
     try {
       if (isManual) {
-        console.log('[usePolling] Manual refresh - setting isRefreshing to true');
+        console.log('[usePolling] Manual refresh - setting isRefreshing to true and bypassing cache');
         setIsRefreshing(true);
       }
 
-      console.log('[usePolling] Fetching data with timeout:', timeout);
-      const data = await fetchWithTimeout(timeout);
+      // For manual refresh, bypass cache to force fresh data
+      const bypassCache = isManual;
+      console.log('[usePolling] Fetching data with timeout:', timeout, 'bypassCache:', bypassCache);
+      const data = await fetchWithTimeout(timeout, bypassCache);
       console.log('[usePolling] Data fetched successfully', { lotsCount: data?.lots?.length, studentsCount: data?.students?.length });
 
       if (!isMountedRef.current) {

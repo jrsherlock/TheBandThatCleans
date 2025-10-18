@@ -1,0 +1,460 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>TBTC AR Cleanup Game</title>
+    <script src="https://aframe.io/releases/1.4.2/aframe.min.js"></script>
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+        
+        #ui-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            z-index: 1000;
+        }
+        
+        #score-display {
+            position: absolute;
+            top: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(0, 0, 0, 0.7);
+            color: white;
+            padding: 15px 30px;
+            border-radius: 10px;
+            font-size: 24px;
+            font-weight: bold;
+            display: none;
+        }
+        
+        #instructions {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: rgba(0, 0, 0, 0.8);
+            color: white;
+            padding: 30px;
+            border-radius: 15px;
+            text-align: center;
+            max-width: 80%;
+        }
+        
+        #instructions h2 {
+            margin-top: 0;
+            color: #4CAF50;
+        }
+        
+        #ar-button {
+            position: absolute;
+            bottom: 30px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: #4CAF50;
+            color: white;
+            border: none;
+            padding: 15px 40px;
+            font-size: 18px;
+            border-radius: 25px;
+            cursor: pointer;
+            pointer-events: auto;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.3);
+        }
+        
+        #ar-button:hover {
+            background: #45a049;
+        }
+        
+        #ar-button:disabled {
+            background: #cccccc;
+            cursor: not-allowed;
+        }
+        
+        #back-button {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            background: rgba(0, 0, 0, 0.7);
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            font-size: 16px;
+            border-radius: 5px;
+            cursor: pointer;
+            pointer-events: auto;
+        }
+        
+        .hidden {
+            display: none !important;
+        }
+    </style>
+</head>
+<body>
+    <div id="ui-overlay">
+        <button id="back-button" onclick="goBack()">← Back to TBTC</button>
+        <div id="score-display">Score: <span id="score">0</span></div>
+        <div id="instructions">
+            <h2>🧹 TBTC AR Cleanup Game</h2>
+            <p>Help clean up the parking lot in AR!</p>
+            <p>1. Point your camera at the ground</p>
+            <p>2. Tap to place the trash bin</p>
+            <p>3. Swipe to throw trash into the bin</p>
+            <button id="ar-button">Start AR Experience</button>
+        </div>
+    </div>
+
+    <a-scene
+        embedded
+        vr-mode-ui="enabled: false"
+        renderer="logarithmicDepthBuffer: true; precision: medium; colorManagement: true; sortObjects: true;"
+        webxr="requiredFeatures: hit-test,local-floor;
+               optionalFeatures: dom-overlay;
+               overlayElement: #ui-overlay;">
+
+        <!-- Assets -->
+        <a-assets>
+            <!-- Using placeholder - 3D model not required -->
+        </a-assets>
+
+        <!-- Camera -->
+        <a-camera position="0 1.6 0"></a-camera>
+
+        <!-- Lighting -->
+        <a-light type="ambient" color="#BBB"></a-light>
+        <a-light type="directional" color="#FFF" intensity="0.6" position="-0.5 1 1"></a-light>
+
+        <!-- Reticle for placement -->
+        <a-entity id="reticle" visible="false">
+            <a-ring color="#4CAF50" radius-inner="0.15" radius-outer="0.2" rotation="-90 0 0"></a-ring>
+        </a-entity>
+
+        <!-- Game objects will be added dynamically -->
+    </a-scene>
+
+    <script>
+        let score = 0;
+        let gameStarted = false;
+        let binPlaced = false;
+        let binEntity = null;
+
+        // Wait for A-Frame to be ready
+        let sceneReady = false;
+        const scene = document.querySelector('a-scene');
+
+        scene.addEventListener('loaded', () => {
+            console.log('A-Frame scene loaded');
+            sceneReady = true;
+        });
+
+        // AR Button Handler
+        document.getElementById('ar-button').addEventListener('click', async () => {
+            console.log('AR button clicked');
+
+            if (!sceneReady) {
+                alert('Please wait for the scene to load...');
+                return;
+            }
+
+            if (!navigator.xr) {
+                alert('WebXR is not supported in this browser. Please use Chrome or Edge on an AR-capable Android device.');
+                return;
+            }
+
+            try {
+                console.log('Checking AR support...');
+                const supported = await navigator.xr.isSessionSupported('immersive-ar');
+                console.log('AR supported:', supported);
+
+                if (!supported) {
+                    alert('AR is not supported on this device. Please use an AR-capable device with Chrome or Edge on Android 8.0+.');
+                    return;
+                }
+
+                console.log('Entering AR mode...');
+
+                // Enter AR mode
+                await scene.enterAR();
+
+                console.log('AR mode entered successfully');
+                startGame();
+
+            } catch (error) {
+                console.error('AR Error:', error);
+                console.error('Error details:', error.message, error.stack);
+
+                let errorMessage = 'Could not start AR session. ';
+
+                if (error.name === 'NotAllowedError') {
+                    errorMessage += 'Please grant camera permissions.';
+                } else if (error.name === 'NotSupportedError') {
+                    errorMessage += 'AR is not supported on this device.';
+                } else if (error.name === 'SecurityError') {
+                    errorMessage += 'Please ensure you are using HTTPS.';
+                } else {
+                    errorMessage += 'Error: ' + error.message;
+                }
+
+                alert(errorMessage);
+            }
+        });
+
+        function startGame() {
+            document.getElementById('instructions').classList.add('hidden');
+            document.getElementById('score-display').style.display = 'block';
+            gameStarted = true;
+            
+            // Show reticle for bin placement
+            const reticle = document.getElementById('reticle');
+            reticle.setAttribute('visible', 'true');
+            
+            // Set up hit testing
+            setupHitTesting();
+        }
+
+        function setupHitTesting() {
+            const scene = document.querySelector('a-scene');
+            const reticle = document.getElementById('reticle');
+
+            console.log('Setting up hit testing...');
+
+            scene.addEventListener('enter-vr', async () => {
+                console.log('Entered VR/AR mode');
+                const xrSession = scene.xrSession;
+
+                if (xrSession && xrSession.requestHitTestSource) {
+                    try {
+                        console.log('Requesting hit test source...');
+                        const refSpace = await xrSession.requestReferenceSpace('viewer');
+                        const hitTestSource = await xrSession.requestHitTestSource({ space: refSpace });
+                        scene.hitTestSource = hitTestSource;
+                        console.log('Hit test source created successfully');
+
+                        // Start updating reticle position
+                        updateReticle();
+                    } catch (error) {
+                        console.error('Hit test error:', error);
+                        // Continue without hit testing - user can still place bin manually
+                    }
+                } else {
+                    console.warn('Hit testing not available, using fallback placement');
+                }
+            });
+
+            // Handle screen tap to place bin
+            scene.addEventListener('click', (event) => {
+                if (!binPlaced && gameStarted) {
+                    console.log('Placing bin...');
+                    placeBin();
+                }
+            });
+        }
+
+        function updateReticle() {
+            const scene = document.querySelector('a-scene');
+            const reticle = document.getElementById('reticle');
+
+            scene.renderer.setAnimationLoop((time, frame) => {
+                if (frame && scene.hitTestSource && !binPlaced) {
+                    const hitTestResults = frame.getHitTestResults(scene.hitTestSource);
+
+                    if (hitTestResults.length > 0) {
+                        const hit = hitTestResults[0];
+                        const pose = hit.getPose(scene.renderer.xr.getReferenceSpace());
+
+                        if (pose) {
+                            reticle.setAttribute('visible', 'true');
+                            reticle.setAttribute('position', {
+                                x: pose.transform.position.x,
+                                y: pose.transform.position.y,
+                                z: pose.transform.position.z
+                            });
+                        }
+                    } else {
+                        reticle.setAttribute('visible', 'false');
+                    }
+                }
+            });
+        }
+
+        function placeBin() {
+            const scene = document.querySelector('a-scene');
+            const reticle = document.getElementById('reticle');
+            const camera = document.querySelector('a-camera');
+
+            // Create trash bin
+            binEntity = document.createElement('a-entity');
+
+            // Try to use reticle position, otherwise place in front of camera
+            const reticlePos = reticle.getAttribute('position');
+            if (reticlePos && (reticlePos.x !== 0 || reticlePos.y !== 0 || reticlePos.z !== 0)) {
+                binEntity.setAttribute('position', reticlePos);
+                console.log('Placing bin at reticle position:', reticlePos);
+            } else {
+                // Fallback: place 1.5 meters in front of camera
+                const cameraPos = camera.getAttribute('position');
+                const cameraRotation = camera.getAttribute('rotation');
+
+                // Calculate position in front of camera
+                const distance = 1.5;
+                const radians = (cameraRotation.y || 0) * (Math.PI / 180);
+
+                binEntity.setAttribute('position', {
+                    x: cameraPos.x - Math.sin(radians) * distance,
+                    y: 0,
+                    z: cameraPos.z - Math.cos(radians) * distance
+                });
+                console.log('Placing bin in front of camera (fallback)');
+            }
+
+            // Create a simple bin using primitives
+            const binBase = document.createElement('a-cylinder');
+            binBase.setAttribute('color', '#2196F3');
+            binBase.setAttribute('height', '0.5');
+            binBase.setAttribute('radius', '0.2');
+            binBase.setAttribute('position', '0 0.25 0');
+
+            const binTop = document.createElement('a-cylinder');
+            binTop.setAttribute('color', '#1976D2');
+            binTop.setAttribute('height', '0.05');
+            binTop.setAttribute('radius', '0.22');
+            binTop.setAttribute('position', '0 0.525 0');
+
+            binEntity.appendChild(binBase);
+            binEntity.appendChild(binTop);
+            scene.appendChild(binEntity);
+
+            // Hide reticle
+            reticle.setAttribute('visible', 'false');
+            binPlaced = true;
+
+            console.log('Bin placed successfully');
+
+            // Enable trash throwing
+            enableTrashThrowing();
+        }
+
+        function enableTrashThrowing() {
+            const scene = document.querySelector('a-scene');
+            let touchStartPos = null;
+            
+            scene.addEventListener('touchstart', (event) => {
+                if (binPlaced) {
+                    touchStartPos = {
+                        x: event.touches[0].clientX,
+                        y: event.touches[0].clientY
+                    };
+                }
+            });
+            
+            scene.addEventListener('touchend', (event) => {
+                if (binPlaced && touchStartPos) {
+                    const touchEndPos = {
+                        x: event.changedTouches[0].clientX,
+                        y: event.changedTouches[0].clientY
+                    };
+                    
+                    const swipeDistance = Math.sqrt(
+                        Math.pow(touchEndPos.x - touchStartPos.x, 2) +
+                        Math.pow(touchEndPos.y - touchStartPos.y, 2)
+                    );
+                    
+                    if (swipeDistance > 50) {
+                        throwTrash(touchStartPos, touchEndPos);
+                    }
+                    
+                    touchStartPos = null;
+                }
+            });
+        }
+
+        function throwTrash(startPos, endPos) {
+            const scene = document.querySelector('a-scene');
+            const camera = document.querySelector('a-camera');
+            
+            // Create trash ball
+            const trash = document.createElement('a-sphere');
+            trash.setAttribute('radius', '0.05');
+            trash.setAttribute('color', '#FFC107');
+            
+            const cameraPos = camera.getAttribute('position');
+            trash.setAttribute('position', `${cameraPos.x} ${cameraPos.y - 0.2} ${cameraPos.z - 0.5}`);
+            
+            // Calculate throw direction
+            const dx = (endPos.x - startPos.x) / 100;
+            const dy = -(endPos.y - startPos.y) / 100;
+            
+            // Add physics-like animation
+            trash.setAttribute('animation', {
+                property: 'position',
+                to: `${cameraPos.x + dx} ${cameraPos.y + dy - 1} ${cameraPos.z - 2}`,
+                dur: 1000,
+                easing: 'easeOutQuad'
+            });
+            
+            scene.appendChild(trash);
+            
+            // Check for collision with bin after animation
+            setTimeout(() => {
+                checkCollision(trash);
+            }, 1000);
+        }
+
+        function checkCollision(trash) {
+            if (!binEntity) return;
+            
+            const trashPos = trash.getAttribute('position');
+            const binPos = binEntity.getAttribute('position');
+            
+            const distance = Math.sqrt(
+                Math.pow(trashPos.x - binPos.x, 2) +
+                Math.pow(trashPos.y - binPos.y, 2) +
+                Math.pow(trashPos.z - binPos.z, 2)
+            );
+            
+            if (distance < 0.3) {
+                // Hit!
+                incrementScore();
+                trash.setAttribute('color', '#4CAF50');
+                setTimeout(() => trash.remove(), 500);
+            } else {
+                // Miss
+                setTimeout(() => trash.remove(), 2000);
+            }
+        }
+
+        function incrementScore() {
+            score++;
+            document.getElementById('score').textContent = score;
+            
+            // Visual feedback
+            const scoreDisplay = document.getElementById('score-display');
+            scoreDisplay.style.transform = 'translateX(-50%) scale(1.2)';
+            setTimeout(() => {
+                scoreDisplay.style.transform = 'translateX(-50%) scale(1)';
+            }, 200);
+        }
+
+        function goBack() {
+            window.location.href = '/';
+        }
+
+        // Check WebXR support on load
+        window.addEventListener('load', async () => {
+            if (!navigator.xr) {
+                document.getElementById('ar-button').disabled = true;
+                document.getElementById('ar-button').textContent = 'AR Not Supported';
+            }
+        });
+    </script>
+</body>
+</html>
+

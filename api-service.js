@@ -6,7 +6,7 @@
 // Configuration - Update these values after deploying your Google Apps Script
 const API_CONFIG = {
   // Google Apps Script Web App URL (TBTC - MVP with CORS fixes - Deployed 2025-09-30)
-  BASE_URL: 'https://script.google.com/macros/s/AKfycbzKBDdZKleUjevZSEuwVVPJxidla5c_0mpr9P-LYhXZ6s0bmWGnwd_wV8jJ7O5bUBgu/exec',
+  BASE_URL: 'https://script.google.com/macros/s/AKfycbyCi7nvXrCrkHg9XaFWpAi3T11IDocW19CklCt6xvxru93U_zVNo3aJYYRZQ-OXK1O4/exec',
     
   // API key for authentication (matches MOCK_API_KEY in Code.gs)
   API_KEY: 'tbtc-director-key-2024',
@@ -95,12 +95,22 @@ async function fetchWithRetry(url, options = {}, retries = API_CONFIG.MAX_RETRIE
 }
 
 /**
- * Main API service class
+ * Main API service class with caching support
  */
 class TbtcApiService {
   constructor() {
     this.baseUrl = API_CONFIG.BASE_URL;
     this.apiKey = API_CONFIG.API_KEY;
+
+    // In-memory cache storage
+    this.cache = new Map();
+
+    // Cache TTL (Time To Live) in milliseconds
+    this.cacheTTL = {
+      data: 30000,        // 30 seconds for lots/students data
+      eventConfig: 60000, // 60 seconds for event configuration
+      report: 10000       // 10 seconds for reports (shorter since they're time-sensitive)
+    };
   }
 
   /**
@@ -110,6 +120,94 @@ class TbtcApiService {
     if (!this.baseUrl || this.baseUrl === 'YOUR_GAS_WEB_APP_URL_HERE') {
       throw new Error('API_CONFIG.BASE_URL must be set to your deployed Google Apps Script Web App URL');
     }
+  }
+
+  /**
+   * Get cached data or fetch if expired/missing
+   * @param {string} key - Cache key
+   * @param {Function} fetchFn - Async function to fetch data if cache miss
+   * @param {number} ttl - Time to live in milliseconds
+   * @param {boolean} bypassCache - Force fetch even if cached (default: false)
+   * @returns {Promise<any>} - Cached or fresh data
+   */
+  async getCached(key, fetchFn, ttl, bypassCache = false) {
+    const cached = this.cache.get(key);
+    const now = Date.now();
+
+    // Check if we have valid cached data
+    if (!bypassCache && cached && (now - cached.timestamp) < ttl) {
+      const age = Math.round((now - cached.timestamp) / 1000);
+      console.log(`[Cache HIT] ${key} (age: ${age}s, ttl: ${ttl/1000}s)`);
+      return cached.data;
+    }
+
+    // Cache miss or expired - fetch fresh data
+    const reason = bypassCache ? 'bypass requested' : (cached ? 'expired' : 'not found');
+    console.log(`[Cache MISS] ${key} (${reason}) - fetching from API...`);
+
+    try {
+      const data = await fetchFn();
+
+      // Store in cache with timestamp
+      this.cache.set(key, {
+        data,
+        timestamp: now
+      });
+
+      console.log(`[Cache STORED] ${key} (ttl: ${ttl/1000}s)`);
+      return data;
+    } catch (error) {
+      // If fetch fails and we have stale cache, return it as fallback
+      if (cached) {
+        console.warn(`[Cache FALLBACK] ${key} - using stale cache due to fetch error:`, error.message);
+        return cached.data;
+      }
+      throw error;
+    }
+  }
+
+  /**
+   * Invalidate cache for specific key or all keys
+   * Call this after mutations to ensure fresh data on next fetch
+   * @param {string|null} key - Cache key to invalidate, or null to clear all
+   */
+  invalidateCache(key = null) {
+    if (key) {
+      const existed = this.cache.has(key);
+      this.cache.delete(key);
+      if (existed) {
+        console.log(`[Cache INVALIDATED] ${key}`);
+      }
+    } else {
+      const size = this.cache.size;
+      this.cache.clear();
+      if (size > 0) {
+        console.log(`[Cache CLEARED] All ${size} entries invalidated`);
+      }
+    }
+  }
+
+  /**
+   * Get cache statistics for debugging
+   * @returns {Object} - Cache stats
+   */
+  getCacheStats() {
+    const stats = {
+      size: this.cache.size,
+      entries: []
+    };
+
+    const now = Date.now();
+    this.cache.forEach((value, key) => {
+      const age = Math.round((now - value.timestamp) / 1000);
+      stats.entries.push({
+        key,
+        age: `${age}s`,
+        timestamp: new Date(value.timestamp).toLocaleTimeString()
+      });
+    });
+
+    return stats;
   }
 
   /**
@@ -188,38 +286,42 @@ class TbtcApiService {
   // --- DATA RETRIEVAL METHODS ---
 
   /**
-   * Fetch all lots and students data for initialization
+   * Fetch all lots and students data for initialization (with caching)
+   * @param {boolean} bypassCache - Force fresh fetch even if cached (default: false)
+   * @returns {Promise<{lots: Array, students: Array}>}
    */
-  async fetchInitialData() {
-    try {
-      const response = await this.get('data');
+  async fetchInitialData(bypassCache = false) {
+    return this.getCached('data', async () => {
+      try {
+        const response = await this.get('data');
 
-      // Convert date strings back to Date objects
-      if (response.lots) {
-        response.lots.forEach(lot => {
-          if (lot.lastUpdated) lot.lastUpdated = new Date(lot.lastUpdated);
-          if (lot.actualStartTime) lot.actualStartTime = new Date(lot.actualStartTime);
-          if (lot.completedTime) lot.completedTime = new Date(lot.completedTime);
-        });
+        // Convert date strings back to Date objects
+        if (response.lots) {
+          response.lots.forEach(lot => {
+            if (lot.lastUpdated) lot.lastUpdated = new Date(lot.lastUpdated);
+            if (lot.actualStartTime) lot.actualStartTime = new Date(lot.actualStartTime);
+            if (lot.completedTime) lot.completedTime = new Date(lot.completedTime);
+          });
+        }
+
+        if (response.students) {
+          response.students.forEach(student => {
+            if (student.checkInTime) student.checkInTime = new Date(student.checkInTime);
+          });
+        }
+
+        return response;
+      } catch (error) {
+        console.error('Failed to fetch initial data:', error);
+
+        // If it's a CORS error, provide helpful message
+        if (error.message.includes('CORS') || error.message.includes('Failed to fetch')) {
+          throw new ApiError('CORS error detected. Please verify your Google Apps Script is deployed with "Anyone" access, or test the Web App URL directly in your browser first.', 500);
+        }
+
+        throw new ApiError('Failed to load initial data. Please check your connection and try again.', 500);
       }
-
-      if (response.students) {
-        response.students.forEach(student => {
-          if (student.checkInTime) student.checkInTime = new Date(student.checkInTime);
-        });
-      }
-
-      return response;
-    } catch (error) {
-      console.error('Failed to fetch initial data:', error);
-
-      // If it's a CORS error, provide helpful message
-      if (error.message.includes('CORS') || error.message.includes('Failed to fetch')) {
-        throw new ApiError('CORS error detected. Please verify your Google Apps Script is deployed with "Anyone" access, or test the Web App URL directly in your browser first.', 500);
-      }
-
-      throw new ApiError('Failed to load initial data. Please check your connection and try again.', 500);
-    }
+    }, this.cacheTTL.data, bypassCache);
   }
 
   /**
@@ -241,12 +343,17 @@ class TbtcApiService {
    */
   async updateLotStatus(lotId, status, updatedBy = 'Director') {
     try {
-      return await this.post({
+      const result = await this.post({
         type: 'UPDATE_LOT_STATUS',
         lotId,
         status,
         updatedBy
       });
+
+      // Invalidate cache after mutation
+      this.invalidateCache('data');
+
+      return result;
     } catch (error) {
       console.error('Failed to update lot status:', error);
       throw new ApiError(`Failed to update ${lotId} status. Please try again.`, 500);
@@ -258,12 +365,17 @@ class TbtcApiService {
    */
   async updateBulkLotStatus(lotIds, status, updatedBy = 'Director') {
     try {
-      return await this.post({
+      const result = await this.post({
         type: 'UPDATE_BULK_STATUS',
         lotIds,
         status,
         updatedBy
       });
+
+      // Invalidate cache after mutation
+      this.invalidateCache('data');
+
+      return result;
     } catch (error) {
       console.error('Failed to update bulk lot status:', error);
       throw new ApiError(`Failed to update ${lotIds.length} lots. Please try again.`, 500);
@@ -275,12 +387,17 @@ class TbtcApiService {
    */
   async updateLotDetails(lotId, details, updatedBy = 'Director') {
     try {
-      return await this.post({
+      const result = await this.post({
         type: 'UPDATE_LOT_DETAILS',
         lotId,
         ...details,
         updatedBy
       });
+
+      // Invalidate cache after mutation
+      this.invalidateCache('data');
+
+      return result;
     } catch (error) {
       console.error('Failed to update lot details:', error);
       throw new ApiError(`Failed to update ${lotId} details. Please try again.`, 500);
@@ -294,11 +411,16 @@ class TbtcApiService {
    */
   async updateStudentStatus(studentId, updates) {
     try {
-      return await this.post({
+      const result = await this.post({
         type: 'UPDATE_STUDENT_STATUS',
         studentId,
         updates
       });
+
+      // Invalidate cache after mutation
+      this.invalidateCache('data');
+
+      return result;
     } catch (error) {
       console.error('Failed to update student status:', error);
       throw new ApiError(`Failed to update student status. Please try again.`, 500);
@@ -308,15 +430,19 @@ class TbtcApiService {
   // --- EVENT CONFIGURATION METHODS ---
 
   /**
-   * Get event configuration (check-out toggle state)
+   * Get event configuration (check-out toggle state) with caching
+   * @param {boolean} bypassCache - Force fresh fetch even if cached (default: false)
+   * @returns {Promise<Object>}
    */
-  async getEventConfig() {
-    try {
-      return await this.get('eventConfig');
-    } catch (error) {
-      console.error('Failed to fetch event config:', error);
-      throw new ApiError('Failed to load event configuration. Please try again.', 500);
-    }
+  async getEventConfig(bypassCache = false) {
+    return this.getCached('eventConfig', async () => {
+      try {
+        return await this.get('eventConfig');
+      } catch (error) {
+        console.error('Failed to fetch event config:', error);
+        throw new ApiError('Failed to load event configuration. Please try again.', 500);
+      }
+    }, this.cacheTTL.eventConfig, bypassCache);
   }
 
   /**
@@ -324,12 +450,17 @@ class TbtcApiService {
    */
   async updateEventConfig(checkOutEnabled, eventId = 'event-current', eventName = null) {
     try {
-      return await this.post({
+      const result = await this.post({
         type: 'UPDATE_EVENT_CONFIG',
         checkOutEnabled,
         eventId,
         eventName
       });
+
+      // Invalidate event config cache after mutation
+      this.invalidateCache('eventConfig');
+
+      return result;
     } catch (error) {
       console.error('Failed to update event config:', error);
       throw new ApiError('Failed to update event configuration. Please try again.', 500);
@@ -374,10 +505,15 @@ class TbtcApiService {
   async uploadSignInSheet(payload) {
     try {
       // Use postWithBody for large payloads (images can be very large)
-      return await this.postWithBody({
+      const result = await this.postWithBody({
         type: 'UPLOAD_SIGNIN_SHEET',
         ...payload
       });
+
+      // Invalidate cache after mutation
+      this.invalidateCache('data');
+
+      return result;
     } catch (error) {
       console.error('Failed to upload sign-in sheet:', error);
       throw new ApiError('Failed to upload sign-in sheet. Please try again.', 500);
@@ -392,11 +528,16 @@ class TbtcApiService {
    */
   async reconcilePlaceholderStudent(placeholderId, actualStudentId) {
     try {
-      return await this.post({
+      const result = await this.post({
         type: 'RECONCILE_PLACEHOLDER',
         placeholderId,
         actualStudentId
       });
+
+      // Invalidate cache after mutation
+      this.invalidateCache('data');
+
+      return result;
     } catch (error) {
       console.error('Failed to reconcile placeholder student:', error);
       throw new ApiError('Failed to reconcile placeholder student. Please try again.', 500);

@@ -1,0 +1,224 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>AR Test - Simple Version</title>
+    <script src="https://aframe.io/releases/1.4.2/aframe.min.js"></script>
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden;
+            font-family: Arial, sans-serif;
+        }
+        
+        #ui {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            z-index: 1000;
+        }
+        
+        #status {
+            position: absolute;
+            top: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(0, 0, 0, 0.8);
+            color: #4CAF50;
+            padding: 15px 25px;
+            border-radius: 10px;
+            font-size: 16px;
+            max-width: 80%;
+            text-align: center;
+        }
+        
+        #ar-button {
+            position: absolute;
+            bottom: 30px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: #4CAF50;
+            color: white;
+            border: none;
+            padding: 20px 50px;
+            font-size: 20px;
+            border-radius: 30px;
+            cursor: pointer;
+            pointer-events: auto;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.3);
+        }
+        
+        #ar-button:active {
+            background: #45a049;
+        }
+        
+        #logs {
+            position: absolute;
+            bottom: 100px;
+            left: 10px;
+            right: 10px;
+            background: rgba(0, 0, 0, 0.7);
+            color: #0f0;
+            padding: 10px;
+            border-radius: 5px;
+            font-size: 12px;
+            font-family: monospace;
+            max-height: 200px;
+            overflow-y: auto;
+            pointer-events: auto;
+        }
+    </style>
+</head>
+<body>
+    <div id="ui">
+        <div id="status">AR Test - Simple Version</div>
+        <button id="ar-button">Start AR Test</button>
+        <div id="logs"></div>
+    </div>
+
+    <a-scene
+        embedded
+        vr-mode-ui="enabled: false"
+        renderer="colorManagement: true;">
+        
+        <a-camera position="0 1.6 0"></a-camera>
+        
+        <a-light type="ambient" color="#BBB"></a-light>
+        <a-light type="directional" color="#FFF" intensity="0.6" position="-0.5 1 1"></a-light>
+        
+        <!-- Simple test object -->
+        <a-box id="test-box" position="0 0 -2" color="#4CAF50" visible="false"></a-box>
+    </a-scene>
+
+    <script>
+        // Logging utility
+        function log(message, isError = false) {
+            console.log(message);
+            const logsDiv = document.getElementById('logs');
+            const timestamp = new Date().toLocaleTimeString();
+            const color = isError ? '#f00' : '#0f0';
+            logsDiv.innerHTML += `<div style="color: ${color}">[${timestamp}] ${message}</div>`;
+            logsDiv.scrollTop = logsDiv.scrollHeight;
+        }
+
+        function updateStatus(message) {
+            document.getElementById('status').textContent = message;
+            log(message);
+        }
+
+        // Wait for scene to load
+        const scene = document.querySelector('a-scene');
+        let sceneReady = false;
+
+        scene.addEventListener('loaded', () => {
+            sceneReady = true;
+            log('✅ A-Frame scene loaded');
+            updateStatus('Scene Ready - Click button to test AR');
+        });
+
+        // AR Button Handler
+        document.getElementById('ar-button').addEventListener('click', async () => {
+            log('🔘 AR button clicked');
+            
+            // Step 1: Check scene ready
+            if (!sceneReady) {
+                updateStatus('⏳ Waiting for scene to load...');
+                log('❌ Scene not ready yet', true);
+                return;
+            }
+            log('✅ Scene is ready');
+            
+            // Step 2: Check WebXR support
+            if (!navigator.xr) {
+                updateStatus('❌ WebXR not supported');
+                log('❌ navigator.xr not available', true);
+                alert('WebXR is not supported in this browser. Please use Chrome on Android.');
+                return;
+            }
+            log('✅ navigator.xr is available');
+            
+            try {
+                // Step 3: Check AR support
+                updateStatus('🔍 Checking AR support...');
+                log('Checking if immersive-ar is supported...');
+                
+                const supported = await navigator.xr.isSessionSupported('immersive-ar');
+                log(`AR supported: ${supported}`);
+                
+                if (!supported) {
+                    updateStatus('❌ AR not supported on this device');
+                    log('❌ immersive-ar not supported', true);
+                    alert('AR is not supported on this device. Please use an AR-capable Android device with Chrome.');
+                    return;
+                }
+                log('✅ AR is supported');
+                
+                // Step 4: Request AR session
+                updateStatus('📱 Starting AR session...');
+                log('Requesting AR session...');
+                
+                const xrSession = await navigator.xr.requestSession('immersive-ar', {
+                    requiredFeatures: ['local-floor'],
+                    optionalFeatures: ['dom-overlay'],
+                    domOverlay: { root: document.getElementById('ui') }
+                });
+                
+                log('✅ AR session created');
+                updateStatus('✅ AR Session Active!');
+                
+                // Step 5: Set up renderer
+                log('Setting up WebXR renderer...');
+                await scene.renderer.xr.setSession(xrSession);
+                log('✅ Renderer configured');
+                
+                // Step 6: Show test object
+                log('Showing test object...');
+                const testBox = document.getElementById('test-box');
+                testBox.setAttribute('visible', 'true');
+                log('✅ Test object visible');
+                
+                updateStatus('✅ AR Working! Look for green box');
+                
+                // Handle session end
+                xrSession.addEventListener('end', () => {
+                    log('AR session ended');
+                    updateStatus('AR session ended');
+                    testBox.setAttribute('visible', 'false');
+                });
+                
+            } catch (error) {
+                log(`❌ Error: ${error.name} - ${error.message}`, true);
+                console.error('Full error:', error);
+                
+                let errorMessage = 'AR Error: ';
+                
+                if (error.name === 'NotAllowedError') {
+                    errorMessage += 'Camera permission denied. Please grant camera access.';
+                } else if (error.name === 'NotSupportedError') {
+                    errorMessage += 'AR is not supported on this device.';
+                } else if (error.name === 'SecurityError') {
+                    errorMessage += 'Security error. Please ensure you are using HTTPS.';
+                } else if (error.name === 'InvalidStateError') {
+                    errorMessage += 'Invalid state. Please refresh and try again.';
+                } else {
+                    errorMessage += error.message;
+                }
+                
+                updateStatus('❌ ' + errorMessage);
+                alert(errorMessage);
+            }
+        });
+
+        // Log initial state
+        log('🚀 AR Test initialized');
+        log(`User Agent: ${navigator.userAgent}`);
+        log(`HTTPS: ${window.location.protocol === 'https:'}`);
+        log(`WebXR available: ${!!navigator.xr}`);
+    </script>
+</body>
+</html>
+
