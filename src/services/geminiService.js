@@ -91,6 +91,7 @@ TASK:
 
 IMPORTANT EXTRACTION RULES:
 - Extract the COMPLETE name as written (e.g., "Smith, John" or "John Smith")
+- **CRITICAL: Extract ALL student names that are clearly written in the sign-in sheet**
 - Only extract names from rows where a student name is clearly written
 - Ignore empty rows
 - Ignore header rows
@@ -98,6 +99,8 @@ IMPORTANT EXTRACTION RULES:
 - If a row has a name but is crossed out or marked as invalid, do NOT extract it
 - Preserve the name format as written (Last, First or First Last)
 - If handwriting is unclear but you can make out most of the name, include it with a note
+- **IMPORTANT: The studentCount field MUST exactly match the number of names in the studentNames array**
+- Count every single non-crossed-out name, even if handwriting is messy or partially illegible
 
 Please respond ONLY with valid JSON in this exact format:
 {
@@ -212,21 +215,25 @@ Be precise and thorough. Extract all readable names, even if handwriting is impe
       analysis.illegibleNames = [];
     }
 
-    if (analysis.studentCount > 50) {
-      console.warn('⚠️ Unusually high student count detected:', analysis.studentCount);
+    // CRITICAL FIX: Use studentNames.length as the authoritative count
+    // The AI sometimes reports a different count than the number of names extracted
+    // We trust the actual extracted names array over the reported count
+    const actualStudentCount = analysis.studentNames.length;
+
+    // Log discrepancy if AI count doesn't match extracted names
+    if (analysis.studentCount !== actualStudentCount) {
+      console.warn(`⚠️ AI count mismatch: AI reported ${analysis.studentCount} but extracted ${actualStudentCount} names. Using extracted names count.`);
+      analysis.notes = (analysis.notes || '') + ` [Note: AI reported count ${analysis.studentCount} adjusted to match ${actualStudentCount} extracted names]`;
+    }
+
+    if (actualStudentCount > 50) {
+      console.warn('⚠️ Unusually high student count detected:', actualStudentCount);
       analysis.notes = (analysis.notes || '') + ' WARNING: Unusually high count detected. Please verify manually.';
       analysis.confidence = 'low';
     }
 
-    // Validate that studentCount matches studentNames length (with some tolerance)
-    if (analysis.studentNames.length > 0 &&
-        Math.abs(analysis.studentCount - analysis.studentNames.length) > 2) {
-      console.warn('⚠️ Mismatch between studentCount and studentNames array length');
-      analysis.notes = (analysis.notes || '') + ` Note: Count (${analysis.studentCount}) differs from extracted names (${analysis.studentNames.length}).`;
-    }
-
     const result_data = {
-      count: analysis.studentCount || 0,
+      count: actualStudentCount, // Use actual extracted names count, not AI's reported count
       studentNames: analysis.studentNames || [],
       illegibleNames: analysis.illegibleNames || [],
       lotIdentified: analysis.lotIdentified || '',
@@ -510,12 +517,15 @@ IMPORTANT EXTRACTION RULES:
 - Extract the COMPLETE lot name as it appears in the header
 - Extract the event date exactly as written
 - Extract the COMPLETE student name as written (e.g., "Smith, John" or "John Smith")
+- **CRITICAL: Extract ALL student names that are clearly written in the sign-in sheet**
 - Only extract names from rows where a student name is clearly written
 - Ignore empty rows and header rows
 - **CRITICAL: Do NOT extract any names that have been crossed out, scribbled over, or otherwise marked up to indicate deletion or invalidation**
 - **CRITICAL: Only extract clean, unmarked names that the person clearly intended to be counted**
 - Students sometimes sign into one lot, change their mind, cross out their name, and sign into a different lot - only count them at their intended final lot
 - Preserve the name format as written (Last, First or First Last)
+- **IMPORTANT: The studentCount field MUST exactly match the number of names in the studentNames array**
+- Count every single non-crossed-out name, even if handwriting is messy or partially illegible
 
 Please respond ONLY with valid JSON in this exact format:
 {
@@ -630,8 +640,19 @@ Be precise and thorough. Extract all readable information from the header and st
       throw new Error('Could not identify lot name from image header');
     }
 
+    // CRITICAL FIX: Use studentNames.length as the authoritative count
+    // The AI sometimes reports a different count than the number of names extracted
+    // We trust the actual extracted names array over the reported count
+    const actualStudentCount = analysis.studentNames.length;
+
+    // Log discrepancy if AI count doesn't match extracted names
+    if (analysis.studentCount !== actualStudentCount) {
+      console.warn(`⚠️ AI count mismatch: AI reported ${analysis.studentCount} but extracted ${actualStudentCount} names. Using extracted names count.`);
+      analysis.notes = (analysis.notes || '') + ` [Note: AI reported count ${analysis.studentCount} adjusted to match ${actualStudentCount} extracted names]`;
+    }
+
     const result_data = {
-      count: analysis.studentCount || 0,
+      count: actualStudentCount, // Use actual extracted names count, not AI's reported count
       studentNames: analysis.studentNames || [],
       illegibleNames: analysis.illegibleNames || [],
       lotIdentified: analysis.lotIdentified || '',
