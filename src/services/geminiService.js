@@ -96,11 +96,14 @@ IMPORTANT EXTRACTION RULES:
 - Ignore empty rows
 - Ignore header rows
 - Extract all students regardless of whether they have a time-out entry
-- If a row has a name but is crossed out or marked as invalid, do NOT extract it
+- **IMPORTANT: Only skip a name if it has a clear line drawn through it (crossed out)**
+- Do NOT skip names just because they have minor marks, corrections, or messy handwriting nearby
+- A name is only "crossed out" if there is an obvious horizontal or diagonal line through the entire name
 - Preserve the name format as written (Last, First or First Last)
 - If handwriting is unclear but you can make out most of the name, include it with a note
 - **IMPORTANT: The studentCount field MUST exactly match the number of names in the studentNames array**
 - Count every single non-crossed-out name, even if handwriting is messy or partially illegible
+- When in doubt about whether a name is crossed out, INCLUDE it in the extraction
 
 Please respond ONLY with valid JSON in this exact format:
 {
@@ -520,12 +523,13 @@ IMPORTANT EXTRACTION RULES:
 - **CRITICAL: Extract ALL student names that are clearly written in the sign-in sheet**
 - Only extract names from rows where a student name is clearly written
 - Ignore empty rows and header rows
-- **CRITICAL: Do NOT extract any names that have been crossed out, scribbled over, or otherwise marked up to indicate deletion or invalidation**
-- **CRITICAL: Only extract clean, unmarked names that the person clearly intended to be counted**
-- Students sometimes sign into one lot, change their mind, cross out their name, and sign into a different lot - only count them at their intended final lot
+- **IMPORTANT: Only skip a name if it has a clear line drawn through it (crossed out)**
+- Do NOT skip names just because they have minor marks, corrections, or messy handwriting nearby
+- A name is only "crossed out" if there is an obvious horizontal or diagonal line through the entire name
 - Preserve the name format as written (Last, First or First Last)
 - **IMPORTANT: The studentCount field MUST exactly match the number of names in the studentNames array**
 - Count every single non-crossed-out name, even if handwriting is messy or partially illegible
+- When in doubt about whether a name is crossed out, INCLUDE it in the extraction
 
 Please respond ONLY with valid JSON in this exact format:
 {
