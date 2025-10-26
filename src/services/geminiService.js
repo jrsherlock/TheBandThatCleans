@@ -355,8 +355,382 @@ export function getGeminiStatus() {
   };
 }
 
+/**
+ * Analyze multiple sign-in sheet images in bulk
+ * Automatically identifies lot names from image headers and matches against available lots
+ *
+ * @param {Array<File>} imageFiles - Array of uploaded image files
+ * @param {Array<Object>} availableLots - Array of lot objects with id and name properties
+ * @param {Function} progressCallback - Optional callback for progress updates (0-100)
+ * @returns {Promise<{successful: Array, failed: Array}>}
+ */
+export async function analyzeBulkSignInSheets(imageFiles, availableLots, progressCallback = null) {
+  // Validate API key
+  if (!genAI) {
+    throw new Error('Gemini API not configured. Please set VITE_GEMINI_API_KEY in .env file');
+  }
+
+  if (!imageFiles || imageFiles.length === 0) {
+    throw new Error('No image files provided');
+  }
+
+  if (!availableLots || availableLots.length === 0) {
+    throw new Error('No parking lots available for matching');
+  }
+
+  const results = {
+    successful: [],
+    failed: []
+  };
+
+  const totalFiles = imageFiles.length;
+  let processedCount = 0;
+
+  console.log(`🚀 Starting bulk analysis of ${totalFiles} sign-in sheets...`);
+
+  // Process each image sequentially to avoid rate limiting
+  for (const imageFile of imageFiles) {
+    try {
+      console.log(`📄 Processing: ${imageFile.name}`);
+
+      // Analyze the image without specifying a lot (AI will identify it)
+      const analysis = await analyzeSignInSheetWithLotIdentification(imageFile, availableLots);
+
+      // Match the identified lot name against available lots
+      const matchedLot = findMatchingLot(analysis.lotIdentified, availableLots);
+
+      if (!matchedLot) {
+        throw new Error(`Could not match lot "${analysis.lotIdentified}" to any available parking lot`);
+      }
+
+      results.successful.push({
+        fileName: imageFile.name,
+        lotId: matchedLot.id,
+        lotName: matchedLot.name,
+        studentCount: analysis.count,
+        studentNames: analysis.studentNames,
+        illegibleNames: analysis.illegibleNames,
+        confidence: analysis.confidence,
+        notes: analysis.notes,
+        eventDate: analysis.eventDate,
+        zoneIdentified: analysis.zoneIdentified,
+        imageFile: imageFile,
+        analysis: analysis
+      });
+
+      console.log(`✅ Success: ${imageFile.name} → ${matchedLot.name} (${analysis.count} students)`);
+
+    } catch (error) {
+      console.error(`❌ Failed: ${imageFile.name}`, error);
+      results.failed.push({
+        fileName: imageFile.name,
+        error: error.message || 'Processing failed'
+      });
+    }
+
+    // Update progress
+    processedCount++;
+    const progress = Math.round((processedCount / totalFiles) * 100);
+    if (progressCallback) {
+      progressCallback(progress);
+    }
+  }
+
+  console.log(`🏁 Bulk analysis complete: ${results.successful.length} successful, ${results.failed.length} failed`);
+
+  return results;
+}
+
+/**
+ * Analyze sign-in sheet image and identify the lot from the header
+ * Enhanced version that extracts lot name, zone, and event date from the image
+ *
+ * @param {File} imageFile - The uploaded image file
+ * @param {Array<Object>} availableLots - Array of lot objects for context
+ * @returns {Promise<Object>} Analysis results with lot identification
+ */
+async function analyzeSignInSheetWithLotIdentification(imageFile, availableLots) {
+  // Validate inputs
+  if (!imageFile) {
+    throw new Error('No image file provided');
+  }
+
+  if (!imageFile.type.startsWith('image/')) {
+    throw new Error('Invalid file type. Please upload an image file (JPEG, PNG, etc.)');
+  }
+
+  // Check file size (max 5MB)
+  const MAX_SIZE = 5 * 1024 * 1024; // 5MB
+  if (imageFile.size > MAX_SIZE) {
+    throw new Error('Image file too large. Please upload an image smaller than 5MB');
+  }
+
+  try {
+    console.log('🤖 Analyzing sign-in sheet with lot identification...', {
+      fileName: imageFile.name,
+      fileSize: imageFile.size,
+      fileType: imageFile.type
+    });
+
+    // Convert image to base64
+    const base64Image = await fileToBase64(imageFile);
+
+    // Get model configuration with fallbacks
+    const modelConfig = getAvailableModel();
+    let currentModel = modelConfig.model;
+    let currentModelName = modelConfig.modelName;
+    const fallbackModels = modelConfig.fallbackModels;
+
+    // Create list of lot names for AI context
+    const lotNamesList = availableLots.map(lot => lot.name).join(', ');
+
+    // Enhanced prompt for lot identification
+    const prompt = `
+You are analyzing a parking lot cleanup sign-in sheet image.
+
+This is a physical sign-in sheet where students manually write their names and check-in times for a band cleanup event.
+
+TASK:
+1. Extract the LOT IDENTIFICATION from the header (Zone, Lot Number, Lot Name, Address)
+2. Extract the EVENT DATE from the header (e.g., "2025 Clean Up #2: September 14th")
+3. Extract the FULL NAME of each student who has SIGNED IN
+4. Count the TOTAL number of students who signed in
+5. Note the quality of the image and any issues
+
+HEADER INFORMATION TO EXTRACT:
+- Zone (e.g., "Zone 1 East Side of River")
+- Lot Number and Name (e.g., "Lot 3: Library Lot")
+- Address (e.g., "123 Museum Drive")
+- Event Date (e.g., "2025 Clean Up #2: September 14th")
+
+AVAILABLE PARKING LOTS (for reference):
+${lotNamesList}
+
+IMPORTANT EXTRACTION RULES:
+- Extract the COMPLETE lot name as it appears in the header
+- Extract the event date exactly as written
+- Extract the COMPLETE student name as written (e.g., "Smith, John" or "John Smith")
+- Only extract names from rows where a student name is clearly written
+- Ignore empty rows and header rows
+- **CRITICAL: Do NOT extract any names that have been crossed out, scribbled over, or otherwise marked up to indicate deletion or invalidation**
+- **CRITICAL: Only extract clean, unmarked names that the person clearly intended to be counted**
+- Students sometimes sign into one lot, change their mind, cross out their name, and sign into a different lot - only count them at their intended final lot
+- Preserve the name format as written (Last, First or First Last)
+
+Please respond ONLY with valid JSON in this exact format:
+{
+  "lotIdentified": "<exact lot name from header>",
+  "zoneIdentified": "<zone from header, if any>",
+  "eventDate": "<event date from header, if any>",
+  "studentCount": <number of students who signed in>,
+  "studentNames": [
+    "Name as written on sheet",
+    "Another Name",
+    ...
+  ],
+  "confidence": "high|medium|low",
+  "notes": "<any observations about sheet quality, issues, or discrepancies>",
+  "illegibleNames": [
+    "Partial name or description of illegible entry",
+    ...
+  ]
+}
+
+CONFIDENCE LEVELS:
+- "high": Image is clear, all names are legible, lot info is clear
+- "medium": Image is acceptable, most names are legible, minor issues
+- "low": Image is blurry, hard to read, or lot info is unclear
+
+Be precise and thorough. Extract all readable information from the header and student names.
+    `.trim();
+
+    // Try to generate content with fallback logic
+    let result;
+    let response;
+    let text;
+    let lastError;
+
+    // Try current model first, then fallback models
+    const allModels = [currentModelName, ...fallbackModels];
+
+    for (let i = 0; i < allModels.length; i++) {
+      const modelName = allModels[i];
+
+      try {
+        console.log(`🔍 Attempting analysis with model: ${modelName}`);
+
+        // Get fresh model instance for this attempt
+        const attemptModel = genAI.getGenerativeModel({ model: modelName });
+
+        // Generate content with image
+        result = await attemptModel.generateContent([
+          prompt,
+          {
+            inlineData: {
+              mimeType: imageFile.type,
+              data: base64Image
+            }
+          }
+        ]);
+
+        response = await result.response;
+        text = response.text();
+
+        console.log(`✅ Success with model: ${modelName}`);
+        console.log('🤖 Gemini raw response:', text);
+
+        // Success! Break out of retry loop
+        break;
+
+      } catch (error) {
+        lastError = error;
+        console.warn(`⚠️ Model ${modelName} failed: ${error.message}`);
+
+        // If this is the last model, throw the error
+        if (i === allModels.length - 1) {
+          console.error('❌ All models failed');
+          throw error;
+        }
+
+        // Otherwise, continue to next model
+        console.log(`📋 Trying next fallback model...`);
+      }
+    }
+
+    // Parse JSON response
+    const jsonMatch = text.match(/\{[\s\S]*\}/);
+    if (!jsonMatch) {
+      throw new Error('Failed to parse AI response. Response was not in expected JSON format.');
+    }
+
+    const analysis = JSON.parse(jsonMatch[0]);
+
+    // Validate response structure
+    if (typeof analysis.studentCount !== 'number') {
+      throw new Error('Invalid AI response: studentCount must be a number');
+    }
+
+    if (analysis.studentCount < 0) {
+      throw new Error('Invalid AI response: studentCount cannot be negative');
+    }
+
+    // Validate studentNames array
+    if (!Array.isArray(analysis.studentNames)) {
+      console.warn('⚠️ studentNames not provided or not an array, defaulting to empty array');
+      analysis.studentNames = [];
+    }
+
+    // Ensure illegibleNames is an array
+    if (!Array.isArray(analysis.illegibleNames)) {
+      analysis.illegibleNames = [];
+    }
+
+    // Validate lot identification
+    if (!analysis.lotIdentified || analysis.lotIdentified.trim() === '') {
+      throw new Error('Could not identify lot name from image header');
+    }
+
+    const result_data = {
+      count: analysis.studentCount || 0,
+      studentNames: analysis.studentNames || [],
+      illegibleNames: analysis.illegibleNames || [],
+      lotIdentified: analysis.lotIdentified || '',
+      zoneIdentified: analysis.zoneIdentified || '',
+      eventDate: analysis.eventDate || '',
+      confidence: analysis.confidence || 'low',
+      notes: analysis.notes || '',
+      rawResponse: text,
+      analyzedAt: new Date().toISOString()
+    };
+
+    console.log('✅ Gemini analysis complete:', result_data);
+
+    return result_data;
+
+  } catch (error) {
+    console.error('❌ Gemini API Error:', error);
+
+    // Provide user-friendly error messages
+    if (error.message?.includes('API key') || error.message?.includes('API_KEY_INVALID')) {
+      throw new Error('Invalid API key. Please check your Gemini API configuration in the .env file.');
+    }
+
+    if (error.message?.includes('quota') || error.message?.includes('RESOURCE_EXHAUSTED')) {
+      throw new Error('API quota exceeded. Please try again later or contact support.');
+    }
+
+    if (error.message?.includes('not found') || error.message?.includes('404')) {
+      throw new Error(
+        'Gemini model not available. The AI service may be updating. Please try manual entry or try again later.'
+      );
+    }
+
+    if (error.message?.includes('network') || error.message?.includes('fetch') || error.message?.includes('Failed to fetch')) {
+      throw new Error('Network error. Please check your internet connection and try again.');
+    }
+
+    throw new Error(`Failed to analyze image: ${error.message}`);
+  }
+}
+
+/**
+ * Find matching lot from identified lot name
+ * Uses fuzzy matching to handle variations in lot names
+ *
+ * @param {string} identifiedLotName - Lot name extracted from image
+ * @param {Array<Object>} availableLots - Array of lot objects
+ * @returns {Object|null} Matched lot object or null
+ */
+function findMatchingLot(identifiedLotName, availableLots) {
+  if (!identifiedLotName || !availableLots || availableLots.length === 0) {
+    return null;
+  }
+
+  const normalized = identifiedLotName.toLowerCase().trim();
+
+  // Try exact match first
+  let match = availableLots.find(lot =>
+    lot.name.toLowerCase().trim() === normalized
+  );
+
+  if (match) {
+    console.log(`✅ Exact match: "${identifiedLotName}" → ${match.name}`);
+    return match;
+  }
+
+  // Try partial match (contains)
+  match = availableLots.find(lot =>
+    lot.name.toLowerCase().includes(normalized) ||
+    normalized.includes(lot.name.toLowerCase())
+  );
+
+  if (match) {
+    console.log(`✅ Partial match: "${identifiedLotName}" → ${match.name}`);
+    return match;
+  }
+
+  // Try matching just the lot number (e.g., "Lot 3" or "3")
+  const lotNumberMatch = normalized.match(/lot\s*(\d+)|^(\d+)$/i);
+  if (lotNumberMatch) {
+    const lotNumber = lotNumberMatch[1] || lotNumberMatch[2];
+    match = availableLots.find(lot =>
+      lot.name.toLowerCase().includes(`lot ${lotNumber}`) ||
+      lot.name.toLowerCase().includes(`lot${lotNumber}`)
+    );
+
+    if (match) {
+      console.log(`✅ Lot number match: "${identifiedLotName}" → ${match.name}`);
+      return match;
+    }
+  }
+
+  console.warn(`⚠️ No match found for: "${identifiedLotName}"`);
+  return null;
+}
+
 export default {
   analyzeSignInSheet,
+  analyzeBulkSignInSheets,
   isGeminiConfigured,
   getGeminiStatus
 };

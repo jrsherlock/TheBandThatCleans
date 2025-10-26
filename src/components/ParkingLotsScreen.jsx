@@ -17,6 +17,7 @@ import { isReadOnly } from '../utils/roleHelpers.jsx';
 import { ProtectedButton, ProtectedSelect } from './ProtectedComponents.jsx';
 import LotEditModal from './LotEditModal.jsx';
 import SignInSheetUploadModal from './SignInSheetUpload/SignInSheetUploadModal.jsx';
+import BulkSignInSheetUpload from './SignInSheetUpload/BulkSignInSheetUpload.jsx';
 import DriveLinkButton from './DriveLinkButton.jsx';
 import { LeafletMapView } from './LeafletMapView.jsx';
 
@@ -564,6 +565,7 @@ const ParkingLotsScreen = ({
   onLotStatusUpdate,
   onLotDetailsUpdate,
   onSignInSheetUpload,
+  onBulkSignInSheetUpload,
   getStatusStyles,
   statuses,
   sections,
@@ -577,6 +579,7 @@ const ParkingLotsScreen = ({
 
   const [selectedLotId, setSelectedLotId] = useState(null);
   const [uploadLotId, setUploadLotId] = useState(null);
+  const [showBulkUpload, setShowBulkUpload] = useState(false);
   const [sectionFilter, setSectionFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState("all");
   const [priorityFilter, setPriorityFilter] = useState("all");
@@ -636,8 +639,42 @@ const ParkingLotsScreen = ({
     setUploadLotId(null);
   };
 
+  const handleBulkUploadSubmit = async (files, progressCallback) => {
+    return await onBulkSignInSheetUpload(files, progressCallback);
+  };
+
+  const canUploadSignInSheets = hasPermission(currentUser, 'canUploadSignInSheets');
+
   return (
     <div className="space-y-6">
+      {/* Bulk Upload Button - For admins and volunteers */}
+      {canUploadSignInSheets && (
+        <div className="bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-blue-900/20 dark:to-indigo-900/20 rounded-lg shadow p-4 border border-blue-200 dark:border-blue-800">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="p-2 bg-blue-600 dark:bg-blue-500 rounded-lg">
+                <Upload className="text-white" size={24} />
+              </div>
+              <div>
+                <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
+                  Bulk Sign-In Sheet Upload
+                </h3>
+                <p className="text-sm text-gray-600 dark:text-gray-400">
+                  Upload up to 21 sign-in sheets at once with automatic lot identification
+                </p>
+              </div>
+            </div>
+            <button
+              onClick={() => setShowBulkUpload(true)}
+              className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center gap-2 shadow-md hover:shadow-lg"
+            >
+              <Upload size={20} />
+              <span className="font-medium">Upload Multiple Sheets</span>
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* View Toggle and Filter Bar */}
       <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-4 transition-colors duration-200">
         {/* View Mode Toggle */}
@@ -889,6 +926,16 @@ const ParkingLotsScreen = ({
           lot={lotToUpload}
           onClose={handleCloseUploadModal}
           onSubmit={handleSignInSheetSubmit}
+          currentUser={currentUser}
+          availableLots={lots}
+        />
+      )}
+
+      {/* Bulk Sign-In Sheet Upload Modal - For admins and volunteers */}
+      {showBulkUpload && (
+        <BulkSignInSheetUpload
+          onClose={() => setShowBulkUpload(false)}
+          onSubmit={handleBulkUploadSubmit}
           currentUser={currentUser}
           availableLots={lots}
         />

@@ -9,6 +9,7 @@ import { format } from 'date-fns';
 import { motion } from 'framer-motion';
 import { toast, Toaster } from 'react-hot-toast';
 import apiService, { ApiError } from './api-service.js';
+import { analyzeBulkSignInSheets } from './src/services/geminiService.js';
 
 // Import TBTC Logo
 import TBTCLogo from './src/public/TBTC.png';
@@ -759,6 +760,83 @@ const App = () => {
     }
   };
 
+  // Handler for bulk sign-in sheet upload
+  const handleBulkSignInSheetUpload = async (imageFiles, progressCallback) => {
+    setOperationLoading(true);
+
+    try {
+      console.log(`📤 Starting bulk upload of ${imageFiles.length} sign-in sheets...`);
+
+      // Step 1: Analyze all images with AI to identify lots and count students
+      const analysisResults = await analyzeBulkSignInSheets(imageFiles, lots, progressCallback);
+
+      if (analysisResults.failed.length === imageFiles.length) {
+        throw new Error('All images failed to process. Please check the images and try again.');
+      }
+
+      // Step 2: Convert images to base64 for backend upload
+      const uploadsWithImages = await Promise.all(
+        analysisResults.successful.map(async (result) => {
+          // Convert image to base64
+          const base64Image = await fileToBase64(result.imageFile);
+
+          return {
+            lotId: result.lotId,
+            lotName: result.lotName,
+            studentCount: result.studentCount,
+            studentNames: result.studentNames,
+            confidence: result.confidence,
+            notes: result.notes,
+            eventDate: result.eventDate,
+            imageData: base64Image
+          };
+        })
+      );
+
+      // Step 3: Upload all to backend
+      const uploadResults = await apiService.uploadBulkSignInSheets(
+        uploadsWithImages,
+        currentUser.name
+      );
+
+      // Step 4: Trigger data refresh
+      setTimeout(() => {
+        manualRefresh();
+      }, 500);
+
+      // Return combined results
+      return {
+        successful: uploadResults.successful || [],
+        failed: [
+          ...(uploadResults.failed || []),
+          ...analysisResults.failed
+        ]
+      };
+
+    } catch (error) {
+      console.error('Failed to upload bulk sign-in sheets:', error);
+      throw error;
+    } finally {
+      setOperationLoading(false);
+    }
+  };
+
+  // Helper function to convert File to base64
+  const fileToBase64 = (file) => {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => {
+        // Remove data URL prefix (e.g., "data:image/jpeg;base64,")
+        const base64 = reader.result.split(',')[1];
+        resolve(base64);
+      };
+      reader.onerror = () => {
+        reject(new Error('Failed to read file'));
+      };
+      reader.readAsDataURL(file);
+    });
+  };
+
   // Handler for bulk lot status update (used in Command Center)
   const handleBulkStatusUpdate = async (lotIds, status) => {
     if (!lotIds || lotIds.length === 0) return;
@@ -1046,6 +1124,7 @@ const App = () => {
         onLotStatusUpdate={handleLotStatusUpdate}
         onLotDetailsUpdate={handleLotDetailsUpdate}
         onSignInSheetUpload={handleSignInSheetUpload}
+        onBulkSignInSheetUpload={handleBulkSignInSheetUpload}
         getStatusStyles={getStatusStyles}
         statuses={statuses}
         sections={sections}

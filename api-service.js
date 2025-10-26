@@ -6,7 +6,7 @@
 // Configuration - Update these values after deploying your Google Apps Script
 const API_CONFIG = {
   // Google Apps Script Web App URL (TBTC - MVP with CORS fixes - Deployed 2025-09-30)
-  BASE_URL: 'https://script.google.com/macros/s/AKfycbyCi7nvXrCrkHg9XaFWpAi3T11IDocW19CklCt6xvxru93U_zVNo3aJYYRZQ-OXK1O4/exec',
+  BASE_URL: 'https://script.google.com/macros/s/AKfycbzd0_jFHIsAuYrsQcSKur3KMNUfW7lltyQgMLlxCM_LCX12mh5W17Jf3phG5GQkTtFQ/exec',
     
   // API key for authentication (matches MOCK_API_KEY in Code.gs)
   API_KEY: 'tbtc-director-key-2024',
@@ -40,10 +40,14 @@ const delay = (ms) => new Promise(resolve => setTimeout(resolve, ms));
  * Enhanced fetch with timeout, retries, and error handling
  * IMPORTANT: Google Apps Script has CORS limitations with POST requests
  * Solution: Use GET requests with URL parameters for all operations
+ * @param {string} url - URL to fetch
+ * @param {Object} options - Fetch options
+ * @param {number} retries - Number of retries remaining
+ * @param {number} timeout - Timeout in milliseconds (default: API_CONFIG.TIMEOUT)
  */
-async function fetchWithRetry(url, options = {}, retries = API_CONFIG.MAX_RETRIES) {
+async function fetchWithRetry(url, options = {}, retries = API_CONFIG.MAX_RETRIES, timeout = API_CONFIG.TIMEOUT) {
   const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), API_CONFIG.TIMEOUT);
+  const timeoutId = setTimeout(() => controller.abort(), timeout);
 
   try {
     const fetchOptions = {
@@ -87,7 +91,7 @@ async function fetchWithRetry(url, options = {}, retries = API_CONFIG.MAX_RETRIE
     )) {
       console.warn(`API request failed, retrying... (${retries} attempts left)`, error.message);
       await delay(API_CONFIG.RETRY_DELAY);
-      return fetchWithRetry(url, options, retries - 1);
+      return fetchWithRetry(url, options, retries - 1, timeout);
     }
 
     throw error;
@@ -257,8 +261,10 @@ class TbtcApiService {
    * POST request with body (for large payloads like image uploads)
    * Uses URL-encoded form data to avoid CORS preflight issues with Google Apps Script
    * Google Apps Script receives this in e.parameter (not e.postData)
+   * @param {Object} payload - Request payload
+   * @param {number} timeout - Optional custom timeout in milliseconds (default: 10s)
    */
-  async postWithBody(payload) {
+  async postWithBody(payload, timeout = API_CONFIG.TIMEOUT) {
     this.validateConfig();
 
     const requestPayload = {
@@ -280,7 +286,7 @@ class TbtcApiService {
       },
       body: formBody.toString(),
       redirect: 'follow'
-    });
+    }, API_CONFIG.MAX_RETRIES, timeout);
   }
 
   // --- DATA RETRIEVAL METHODS ---
@@ -343,7 +349,7 @@ class TbtcApiService {
    */
   async updateLotStatus(lotId, status, updatedBy = 'Director') {
     try {
-      const result = await this.post({
+      const result = await this.postWithBody({
         type: 'UPDATE_LOT_STATUS',
         lotId,
         status,
@@ -365,7 +371,7 @@ class TbtcApiService {
    */
   async updateBulkLotStatus(lotIds, status, updatedBy = 'Director') {
     try {
-      const result = await this.post({
+      const result = await this.postWithBody({
         type: 'UPDATE_BULK_STATUS',
         lotIds,
         status,
@@ -387,7 +393,7 @@ class TbtcApiService {
    */
   async updateLotDetails(lotId, details, updatedBy = 'Director') {
     try {
-      const result = await this.post({
+      const result = await this.postWithBody({
         type: 'UPDATE_LOT_DETAILS',
         lotId,
         ...details,
@@ -411,7 +417,7 @@ class TbtcApiService {
    */
   async updateStudentStatus(studentId, updates) {
     try {
-      const result = await this.post({
+      const result = await this.postWithBody({
         type: 'UPDATE_STUDENT_STATUS',
         studentId,
         updates
@@ -450,7 +456,7 @@ class TbtcApiService {
    */
   async updateEventConfig(checkOutEnabled, eventId = 'event-current', eventName = null) {
     try {
-      const result = await this.post({
+      const result = await this.postWithBody({
         type: 'UPDATE_EVENT_CONFIG',
         checkOutEnabled,
         eventId,
@@ -474,7 +480,7 @@ class TbtcApiService {
    */
   async uploadImageForOcr(lotId, imageData, updatedBy = 'Director') {
     try {
-      return await this.post({
+      return await this.postWithBody({
         type: 'OCR_UPLOAD',
         lotId,
         data: imageData,
@@ -541,6 +547,62 @@ class TbtcApiService {
     } catch (error) {
       console.error('Failed to reconcile placeholder student:', error);
       throw new ApiError('Failed to reconcile placeholder student. Please try again.', 500);
+    }
+  }
+
+  /**
+   * Upload multiple sign-in sheets in bulk with automatic lot identification
+   * Processes multiple images, identifies lots from headers, and updates all records
+   * @param {Array<Object>} uploads - Array of upload objects
+   * @param {string} uploads[].lotId - Identified lot ID
+   * @param {string} uploads[].lotName - Identified lot name
+   * @param {number} uploads[].aiCount - AI-detected student count
+   * @param {Array<string>} uploads[].studentNames - Array of extracted student names
+   * @param {string} uploads[].aiConfidence - AI confidence level
+   * @param {string} uploads[].imageData - Base64 encoded image
+   * @param {string} uploads[].notes - Additional notes
+   * @param {string} uploads[].eventDate - Event date from image header
+   * @param {string} enteredBy - Name of user who submitted
+   * @returns {Promise<Object>} Results with successful and failed uploads
+   */
+  async uploadBulkSignInSheets(uploads, enteredBy = 'Director') {
+    try {
+      // Validate inputs
+      if (!uploads || uploads.length === 0) {
+        throw new ApiError('No uploads provided', 400);
+      }
+
+      console.log(`📤 Uploading ${uploads.length} sign-in sheets in bulk...`);
+
+      // Use postWithBody with extended timeout for large payloads
+      // Bulk uploads can take a long time due to multiple large images
+      const BULK_UPLOAD_TIMEOUT = 120000; // 120 seconds (2 minutes)
+
+      const result = await this.postWithBody({
+        type: 'UPLOAD_BULK_SIGNIN_SHEETS',
+        uploads: uploads.map(upload => ({
+          lotId: upload.lotId,
+          lotName: upload.lotName,
+          aiCount: upload.studentCount,
+          studentNames: upload.studentNames,
+          aiConfidence: upload.confidence,
+          imageData: upload.imageData,
+          notes: upload.notes,
+          eventDate: upload.eventDate,
+          enteredBy: enteredBy
+        })),
+        enteredBy
+      }, BULK_UPLOAD_TIMEOUT);
+
+      // Invalidate cache after mutation
+      this.invalidateCache('data');
+
+      console.log(`✅ Bulk upload complete: ${result.successful?.length || 0} successful, ${result.failed?.length || 0} failed`);
+
+      return result;
+    } catch (error) {
+      console.error('Failed to upload bulk sign-in sheets:', error);
+      throw new ApiError('Failed to upload sign-in sheets. Please try again.', 500);
     }
   }
 
