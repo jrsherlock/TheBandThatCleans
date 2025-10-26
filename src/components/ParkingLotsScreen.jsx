@@ -16,7 +16,6 @@ import { hasPermission } from '../utils/permissions.js';
 import { isReadOnly } from '../utils/roleHelpers.jsx';
 import { ProtectedButton, ProtectedSelect } from './ProtectedComponents.jsx';
 import LotEditModal from './LotEditModal.jsx';
-import SignInSheetUploadModal from './SignInSheetUpload/SignInSheetUploadModal.jsx';
 import BulkSignInSheetUpload from './SignInSheetUpload/BulkSignInSheetUpload.jsx';
 import DriveLinkButton from './DriveLinkButton.jsx';
 import { LeafletMapView } from './LeafletMapView.jsx';
@@ -123,7 +122,7 @@ export const getStatusCardColors = (status) => {
 /**
  * Enhanced LotCard with improved visual design and status indicators
  */
-const LotCard = ({ lot, students, currentUser, onStatusChange, onEditClick, onUploadClick, getStatusStyles, statuses, StatusBadge }) => {
+const LotCard = ({ lot, students, currentUser, onStatusChange, onEditClick, getStatusStyles, statuses, StatusBadge }) => {
   const assignedStudents = students.filter(s => (lot.assignedStudents || []).includes(s.id));
   const studentsPresent = assignedStudents.filter(s => s.checkedIn);
   const lotStatusOptions = statuses.filter(s => s !== lot.status);
@@ -269,20 +268,6 @@ const LotCard = ({ lot, students, currentUser, onStatusChange, onEditClick, onUp
         </div>
       )}
 
-      {/* Upload Sign-In Sheet Button - For admins and volunteers */}
-      {canUploadSignInSheets && onUploadClick && (
-        <div className="mb-4">
-          <button
-            onClick={() => onUploadClick(lot.id)}
-            aria-label={`Upload sign-in sheet for ${lot.name}`}
-            className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-green-100 dark:bg-green-900/40 text-green-700 dark:text-green-300 rounded-lg hover:bg-green-200 dark:hover:bg-green-900/60 transition-all duration-200 hover:-translate-y-0.5 active:translate-y-0 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 dark:focus:ring-green-400 min-h-[44px]"
-          >
-            <Upload size={16} aria-hidden="true" />
-            <span className="text-sm font-medium">Upload Sign-In Sheet</span>
-          </button>
-        </div>
-      )}
-
       {/* View Sign-In Sheet Button - For admins and volunteers when image exists */}
       {(canEdit || canUploadSignInSheets) && lot.signUpSheetPhoto && lot.signUpSheetPhoto.trim() !== '' && (
         <div className="mb-4">
@@ -318,13 +303,12 @@ const LotCard = ({ lot, students, currentUser, onStatusChange, onEditClick, onUp
 /**
  * List View Component - Compact table/list format
  */
-const LotListView = ({ lots, students, currentUser, onStatusChange, onEditClick, onUploadClick, getStatusStyles, statuses, StatusBadge }) => {
+const LotListView = ({ lots, students, currentUser, onStatusChange, onEditClick, getStatusStyles, statuses, StatusBadge }) => {
   const [sortField, setSortField] = useState('name');
   const [sortDirection, setSortDirection] = useState('asc');
 
   const canEdit = hasPermission(currentUser, 'canEditLotStatus');
   const canEditDetails = hasPermission(currentUser, 'canEditLotDetails');
-  const canUploadSignInSheets = hasPermission(currentUser, 'canUploadSignInSheets');
 
   // Sort lots
   const sortedLots = useMemo(() => {
@@ -406,7 +390,7 @@ const LotListView = ({ lots, students, currentUser, onStatusChange, onEditClick,
               <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 dark:text-gray-300 uppercase tracking-wider">
                 <SortButton field="updated">Last Updated</SortButton>
               </th>
-              {(canEdit || canUploadSignInSheets) && (
+              {canEdit && (
                 <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 dark:text-gray-300 uppercase tracking-wider">
                   Actions
                 </th>
@@ -478,47 +462,33 @@ const LotListView = ({ lots, students, currentUser, onStatusChange, onEditClick,
                   <td className="px-4 py-3 text-sm text-gray-600 dark:text-gray-400">
                     {lot.lastUpdated ? format(lot.lastUpdated, 'HH:mm') : 'N/A'}
                   </td>
-                  {(canEdit || canUploadSignInSheets) && (
+                  {canEdit && (
                     <td className="px-4 py-3">
-                      <div className="flex items-center gap-2">
-                        {/* Status Dropdown */}
-                        {canEdit && onStatusChange && (
-                          <select
-                            value={lot.status}
-                            onChange={(e) => onStatusChange(lot.id, e.target.value)}
-                            aria-label={`Change status for ${lot.name}`}
-                            className={`
-                              text-xs px-2 py-1 rounded border-2 font-medium
-                              transition-all duration-200
-                              bg-white dark:bg-gray-800
-                              ${getStatusCardColors(lot.status).buttonBorder}
-                              ${getStatusCardColors(lot.status).buttonText}
-                              hover:shadow-md
-                              focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 dark:focus:ring-blue-400
-                              cursor-pointer
-                            `}
-                          >
-                            <option value={lot.status}>{getStatusLabel(lot.status)}</option>
-                            {statuses.filter(s => s !== lot.status).map(status => (
-                              <option key={status} value={status}>
-                                {getStatusLabel(status)}
-                              </option>
-                            ))}
-                          </select>
-                        )}
-
-                        {/* Upload Button */}
-                        {canUploadSignInSheets && onUploadClick && (
-                          <button
-                            onClick={() => onUploadClick(lot.id)}
-                            className="p-1.5 rounded-lg bg-green-100 dark:bg-green-900/40 text-green-700 dark:text-green-300 hover:bg-green-200 dark:hover:bg-green-900/60 transition-colors"
-                            aria-label={`Upload sign-in sheet for ${lot.name}`}
-                            title="Upload Sign-In Sheet"
-                          >
-                            <Upload size={16} />
-                          </button>
-                        )}
-                      </div>
+                      {/* Status Dropdown */}
+                      {onStatusChange && (
+                        <select
+                          value={lot.status}
+                          onChange={(e) => onStatusChange(lot.id, e.target.value)}
+                          aria-label={`Change status for ${lot.name}`}
+                          className={`
+                            text-xs px-2 py-1 rounded border-2 font-medium
+                            transition-all duration-200
+                            bg-white dark:bg-gray-800
+                            ${getStatusCardColors(lot.status).buttonBorder}
+                            ${getStatusCardColors(lot.status).buttonText}
+                            hover:shadow-md
+                            focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 dark:focus:ring-blue-400
+                            cursor-pointer
+                          `}
+                        >
+                          <option value={lot.status}>{getStatusLabel(lot.status)}</option>
+                          {statuses.filter(s => s !== lot.status).map(status => (
+                            <option key={status} value={status}>
+                              {getStatusLabel(status)}
+                            </option>
+                          ))}
+                        </select>
+                      )}
                     </td>
                   )}
                 </motion.tr>
@@ -581,16 +551,16 @@ const LotListView = ({ lots, students, currentUser, onStatusChange, onEditClick,
               </div>
 
               {/* Mobile Actions */}
-              {(canEdit || canUploadSignInSheets) && (
-                <div className="mt-3 flex gap-2">
+              {canEdit && (
+                <div className="mt-3">
                   {/* Status Dropdown */}
-                  {canEdit && onStatusChange && (
+                  {onStatusChange && (
                     <select
                       value={lot.status}
                       onChange={(e) => onStatusChange(lot.id, e.target.value)}
                       aria-label={`Change status for ${lot.name}`}
                       className={`
-                        flex-1 text-xs px-3 py-2 rounded-lg border-2 font-medium
+                        w-full text-xs px-3 py-2 rounded-lg border-2 font-medium
                         transition-all duration-200
                         bg-white dark:bg-gray-800
                         ${getStatusCardColors(lot.status).buttonBorder}
@@ -607,18 +577,6 @@ const LotListView = ({ lots, students, currentUser, onStatusChange, onEditClick,
                         </option>
                       ))}
                     </select>
-                  )}
-
-                  {/* Upload Button */}
-                  {canUploadSignInSheets && onUploadClick && (
-                    <button
-                      onClick={() => onUploadClick(lot.id)}
-                      className="px-4 py-2 rounded-lg bg-green-100 dark:bg-green-900/40 text-green-700 dark:text-green-300 hover:bg-green-200 dark:hover:bg-green-900/60 transition-colors flex items-center gap-2 text-xs font-medium"
-                      aria-label={`Upload sign-in sheet for ${lot.name}`}
-                    >
-                      <Upload size={14} />
-                      <span>Upload</span>
-                    </button>
                   )}
                 </div>
               )}
@@ -656,7 +614,6 @@ const ParkingLotsScreen = ({
   currentUser,
   onLotStatusUpdate,
   onLotDetailsUpdate,
-  onSignInSheetUpload,
   onBulkSignInSheetUpload,
   getStatusStyles,
   statuses,
@@ -670,7 +627,6 @@ const ParkingLotsScreen = ({
   });
 
   const [selectedLotId, setSelectedLotId] = useState(null);
-  const [uploadLotId, setUploadLotId] = useState(null);
   const [showBulkUpload, setShowBulkUpload] = useState(false);
   const [sectionFilter, setSectionFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState("all");
@@ -703,7 +659,6 @@ const ParkingLotsScreen = ({
   }, [lots, sectionFilter, statusFilter, priorityFilter, searchQuery]);
 
   const lotToEdit = lots.find(l => l.id === selectedLotId);
-  const lotToUpload = lots.find(l => l.id === uploadLotId);
 
   const handleEditClick = (lotId) => {
     if (canEditDetails) {
@@ -711,16 +666,8 @@ const ParkingLotsScreen = ({
     }
   };
 
-  const handleUploadClick = (lotId) => {
-    setUploadLotId(lotId);
-  };
-
   const handleCloseModal = () => {
     setSelectedLotId(null);
-  };
-
-  const handleCloseUploadModal = () => {
-    setUploadLotId(null);
   };
 
   const handleSaveLot = (lotId, updates) => {
@@ -732,11 +679,6 @@ const ParkingLotsScreen = ({
     onLotDetailsUpdate(lotId, { signUpSheetPhoto: photoData });
   };
 
-  const handleSignInSheetSubmit = async (submissionData) => {
-    await onSignInSheetUpload(submissionData);
-    setUploadLotId(null);
-  };
-
   const handleBulkUploadSubmit = async (files, progressCallback) => {
     return await onBulkSignInSheetUpload(files, progressCallback);
   };
@@ -745,29 +687,46 @@ const ParkingLotsScreen = ({
 
   return (
     <div className="space-y-6">
-      {/* Bulk Upload Button - For admins and volunteers */}
+      {/* Unified Sign-In Sheet Upload - For admins and volunteers */}
       {canUploadSignInSheets && (
-        <div className="bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-blue-900/20 dark:to-indigo-900/20 rounded-lg shadow p-4 border border-blue-200 dark:border-blue-800">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <div className="p-2 bg-blue-600 dark:bg-blue-500 rounded-lg">
-                <Upload className="text-white" size={24} />
+        <div className="bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-blue-900/20 dark:to-indigo-900/20 rounded-lg shadow-lg p-6 border border-blue-200 dark:border-blue-800">
+          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+            <div className="flex items-start gap-4">
+              <div className="p-3 bg-blue-600 dark:bg-blue-500 rounded-lg flex-shrink-0">
+                <Upload className="text-white" size={28} />
               </div>
-              <div>
-                <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
-                  Bulk Sign-In Sheet Upload
+              <div className="flex-1">
+                <h3 className="text-xl font-bold text-gray-900 dark:text-white mb-2">
+                  Upload Sign-In Sheets
                 </h3>
-                <p className="text-sm text-gray-600 dark:text-gray-400">
-                  Upload up to 21 sign-in sheets at once with automatic lot identification
+                <p className="text-sm text-gray-700 dark:text-gray-300 mb-2">
+                  Upload one or multiple sign-in sheets at once. Our AI automatically identifies which lot each sheet belongs to.
+                </p>
+                <div className="flex flex-wrap items-center gap-3 text-xs text-gray-600 dark:text-gray-400">
+                  <div className="flex items-center gap-1.5">
+                    <Sparkles size={14} className="text-purple-500 dark:text-purple-400" />
+                    <span>AI reads lot names from images</span>
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <UserCheck size={14} className="text-green-500 dark:text-green-400" />
+                    <span>Counts students automatically</span>
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <CheckCircle size={14} className="text-blue-500 dark:text-blue-400" />
+                    <span>Matches names to roster</span>
+                  </div>
+                </div>
+                <p className="text-xs text-gray-500 dark:text-gray-500 mt-2 italic">
+                  No need to select lots beforehand - just upload all your sheets and we'll handle the rest!
                 </p>
               </div>
             </div>
             <button
               onClick={() => setShowBulkUpload(true)}
-              className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center gap-2 shadow-md hover:shadow-lg"
+              className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-all flex items-center justify-center gap-2 shadow-md hover:shadow-xl font-semibold whitespace-nowrap"
             >
               <Upload size={20} />
-              <span className="font-medium">Upload Multiple Sheets</span>
+              <span>Upload Sheets</span>
             </button>
           </div>
         </div>
@@ -973,7 +932,6 @@ const ParkingLotsScreen = ({
                   currentUser={currentUser}
                   onStatusChange={canEdit ? onLotStatusUpdate : null}
                   onEditClick={canEditDetails ? handleEditClick : null}
-                  onUploadClick={handleUploadClick}
                   getStatusStyles={getStatusStyles}
                   statuses={statuses}
                   StatusBadge={StatusBadge}
@@ -1007,7 +965,6 @@ const ParkingLotsScreen = ({
                 currentUser={currentUser}
                 onStatusChange={onLotStatusUpdate}
                 onEditClick={handleEditClick}
-                onUploadClick={handleUploadClick}
                 getStatusStyles={getStatusStyles}
                 statuses={statuses}
                 StatusBadge={StatusBadge}
@@ -1049,17 +1006,6 @@ const ParkingLotsScreen = ({
           onClose={handleCloseModal}
           onSave={handleSaveLot}
           onPhotoUpload={handlePhotoUpload}
-        />
-      )}
-
-      {/* Sign-In Sheet Upload Modal - For admins and volunteers */}
-      {lotToUpload && (
-        <SignInSheetUploadModal
-          lot={lotToUpload}
-          onClose={handleCloseUploadModal}
-          onSubmit={handleSignInSheetSubmit}
-          currentUser={currentUser}
-          availableLots={lots}
         />
       )}
 
