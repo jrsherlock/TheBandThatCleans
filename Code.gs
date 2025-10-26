@@ -268,24 +268,33 @@ function getEventConfigData() {
     }
 
     const data = sheet.getDataRange().getValues();
+    logInfo("getEventConfigData", `EventConfig sheet has ${data.length} rows`);
+
     if (data.length < 2) {
-      logError("getEventConfigData", "EventConfig sheet is empty");
+      logError("getEventConfigData", "EventConfig sheet is empty (no data rows)");
       return { eventName: "DefaultEvent", eventDate: new Date().toISOString().split('T')[0] };
     }
 
     const headers = data[0];
+    logInfo("getEventConfigData", `Headers found: ${JSON.stringify(headers)}`);
+
     const eventNameIndex = headers.indexOf("eventName");
     const eventDateIndex = headers.indexOf("eventDate");
 
     if (eventNameIndex === -1 || eventDateIndex === -1) {
-      logError("getEventConfigData", "EventConfig sheet missing required headers");
+      logError("getEventConfigData", `EventConfig sheet missing required headers. eventNameIndex: ${eventNameIndex}, eventDateIndex: ${eventDateIndex}`);
       return { eventName: "DefaultEvent", eventDate: new Date().toISOString().split('T')[0] };
     }
 
     const configRow = data[1]; // Get the first config row
+    const eventName = configRow[eventNameIndex] || "CleanupEvent";
+    const eventDate = configRow[eventDateIndex] ? new Date(configRow[eventDateIndex]).toISOString().split('T')[0] : new Date().toISOString().split('T')[0];
+
+    logInfo("getEventConfigData", `Retrieved event config - Name: "${eventName}", Date: "${eventDate}"`);
+
     return {
-      eventName: configRow[eventNameIndex] || "CleanupEvent",
-      eventDate: configRow[eventDateIndex] ? new Date(configRow[eventDateIndex]).toISOString().split('T')[0] : new Date().toISOString().split('T')[0]
+      eventName: eventName,
+      eventDate: eventDate
     };
 
   } catch (error) {
@@ -2216,8 +2225,17 @@ function uploadImageToDrive(base64Data, lotName, eventName, eventDate, mimeType 
     const base64Clean = base64Data.replace(/^data:image\/\w+;base64,/, '');
 
     // Sanitize file name components
-    const safeLotName = (lotName || 'UnknownLot').replace(/[^a-z0-9\s-]/gi, '').replace(/[\s:]+/g, '_');
-    const safeEventName = (eventName || 'CleanupEvent').replace(/[^a-z0-9\s-#]/gi, '').replace(/[\s:]+/g, '_');
+    // Remove all special characters except alphanumeric, spaces, hyphens, and # symbol
+    // Then replace spaces and colons with underscores
+    const safeLotName = (lotName || 'UnknownLot')
+      .replace(/[^a-z0-9\s-#]/gi, '')
+      .replace(/[\s:]+/g, '_')
+      .trim();
+
+    const safeEventName = (eventName || 'CleanupEvent')
+      .replace(/[^a-z0-9\s-#]/gi, '')
+      .replace(/[\s:]+/g, '')
+      .trim();
 
     // Format date
     let safeDate = new Date().toISOString().split('T')[0]; // Default to today
@@ -2233,8 +2251,9 @@ function uploadImageToDrive(base64Data, lotName, eventName, eventDate, mimeType 
       }
     }
 
-    // Create the new file name: LotName_EventName_EventDate_Timestamp.jpg
-    const newFileName = `${safeLotName}_${safeEventName}_${safeDate}_${new Date().getTime()}.jpg`;
+    // Create the new file name: EventName_LotName_EventDate_Timestamp.jpg
+    // Event name comes FIRST so files sort by event in Google Drive
+    const newFileName = `${safeEventName}_${safeLotName}_${safeDate}_${new Date().getTime()}.jpg`;
 
     // Decode base64 to blob
     const blob = Utilities.newBlob(
