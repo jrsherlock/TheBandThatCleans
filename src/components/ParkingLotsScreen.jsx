@@ -8,7 +8,7 @@ import React, { useState, useMemo, useEffect } from 'react';
 import {
   Users, MapPin, AlertTriangle, MessageSquare, Clock, PenLine, Filter, CheckCircle, Play,
   Grid3x3, List, Map as MapIcon, ArrowUpDown, Navigation, ExternalLink, Upload, FileImage,
-  Sparkles, UserCheck, ChevronDown
+  Sparkles, UserCheck, ChevronDown, Search, X
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -318,12 +318,13 @@ const LotCard = ({ lot, students, currentUser, onStatusChange, onEditClick, onUp
 /**
  * List View Component - Compact table/list format
  */
-const LotListView = ({ lots, students, currentUser, onStatusChange, onEditClick, getStatusStyles, statuses, StatusBadge }) => {
+const LotListView = ({ lots, students, currentUser, onStatusChange, onEditClick, onUploadClick, getStatusStyles, statuses, StatusBadge }) => {
   const [sortField, setSortField] = useState('name');
   const [sortDirection, setSortDirection] = useState('asc');
 
   const canEdit = hasPermission(currentUser, 'canEditLotStatus');
   const canEditDetails = hasPermission(currentUser, 'canEditLotDetails');
+  const canUploadSignInSheets = hasPermission(currentUser, 'canUploadSignInSheets');
 
   // Sort lots
   const sortedLots = useMemo(() => {
@@ -405,6 +406,11 @@ const LotListView = ({ lots, students, currentUser, onStatusChange, onEditClick,
               <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 dark:text-gray-300 uppercase tracking-wider">
                 <SortButton field="updated">Last Updated</SortButton>
               </th>
+              {(canEdit || canUploadSignInSheets) && (
+                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 dark:text-gray-300 uppercase tracking-wider">
+                  Actions
+                </th>
+              )}
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
@@ -472,6 +478,49 @@ const LotListView = ({ lots, students, currentUser, onStatusChange, onEditClick,
                   <td className="px-4 py-3 text-sm text-gray-600 dark:text-gray-400">
                     {lot.lastUpdated ? format(lot.lastUpdated, 'HH:mm') : 'N/A'}
                   </td>
+                  {(canEdit || canUploadSignInSheets) && (
+                    <td className="px-4 py-3">
+                      <div className="flex items-center gap-2">
+                        {/* Status Dropdown */}
+                        {canEdit && onStatusChange && (
+                          <select
+                            value={lot.status}
+                            onChange={(e) => onStatusChange(lot.id, e.target.value)}
+                            aria-label={`Change status for ${lot.name}`}
+                            className={`
+                              text-xs px-2 py-1 rounded border-2 font-medium
+                              transition-all duration-200
+                              bg-white dark:bg-gray-800
+                              ${getStatusCardColors(lot.status).buttonBorder}
+                              ${getStatusCardColors(lot.status).buttonText}
+                              hover:shadow-md
+                              focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 dark:focus:ring-blue-400
+                              cursor-pointer
+                            `}
+                          >
+                            <option value={lot.status}>{getStatusLabel(lot.status)}</option>
+                            {statuses.filter(s => s !== lot.status).map(status => (
+                              <option key={status} value={status}>
+                                {getStatusLabel(status)}
+                              </option>
+                            ))}
+                          </select>
+                        )}
+
+                        {/* Upload Button */}
+                        {canUploadSignInSheets && onUploadClick && (
+                          <button
+                            onClick={() => onUploadClick(lot.id)}
+                            className="p-1.5 rounded-lg bg-green-100 dark:bg-green-900/40 text-green-700 dark:text-green-300 hover:bg-green-200 dark:hover:bg-green-900/60 transition-colors"
+                            aria-label={`Upload sign-in sheet for ${lot.name}`}
+                            title="Upload Sign-In Sheet"
+                          >
+                            <Upload size={16} />
+                          </button>
+                        )}
+                      </div>
+                    </td>
+                  )}
                 </motion.tr>
               );
             })}
@@ -530,6 +579,49 @@ const LotListView = ({ lots, students, currentUser, onStatusChange, onEditClick,
                   <span>Updated: {lot.lastUpdated ? format(lot.lastUpdated, 'HH:mm') : 'N/A'}</span>
                 </div>
               </div>
+
+              {/* Mobile Actions */}
+              {(canEdit || canUploadSignInSheets) && (
+                <div className="mt-3 flex gap-2">
+                  {/* Status Dropdown */}
+                  {canEdit && onStatusChange && (
+                    <select
+                      value={lot.status}
+                      onChange={(e) => onStatusChange(lot.id, e.target.value)}
+                      aria-label={`Change status for ${lot.name}`}
+                      className={`
+                        flex-1 text-xs px-3 py-2 rounded-lg border-2 font-medium
+                        transition-all duration-200
+                        bg-white dark:bg-gray-800
+                        ${getStatusCardColors(lot.status).buttonBorder}
+                        ${getStatusCardColors(lot.status).buttonText}
+                        hover:shadow-md
+                        focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 dark:focus:ring-blue-400
+                        cursor-pointer
+                      `}
+                    >
+                      <option value={lot.status}>{getStatusLabel(lot.status)}</option>
+                      {statuses.filter(s => s !== lot.status).map(status => (
+                        <option key={status} value={status}>
+                          {getStatusLabel(status)}
+                        </option>
+                      ))}
+                    </select>
+                  )}
+
+                  {/* Upload Button */}
+                  {canUploadSignInSheets && onUploadClick && (
+                    <button
+                      onClick={() => onUploadClick(lot.id)}
+                      className="px-4 py-2 rounded-lg bg-green-100 dark:bg-green-900/40 text-green-700 dark:text-green-300 hover:bg-green-200 dark:hover:bg-green-900/60 transition-colors flex items-center gap-2 text-xs font-medium"
+                      aria-label={`Upload sign-in sheet for ${lot.name}`}
+                    >
+                      <Upload size={14} />
+                      <span>Upload</span>
+                    </button>
+                  )}
+                </div>
+              )}
             </motion.div>
           );
         })}
@@ -583,6 +675,7 @@ const ParkingLotsScreen = ({
   const [sectionFilter, setSectionFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState("all");
   const [priorityFilter, setPriorityFilter] = useState("all");
+  const [searchQuery, setSearchQuery] = useState("");
 
   // Persist view mode to localStorage
   useEffect(() => {
@@ -600,9 +693,14 @@ const ParkingLotsScreen = ({
       const sectionMatch = sectionFilter === "all" || lotZone === sectionFilter;
       const statusMatch = statusFilter === "all" || lot.status === statusFilter;
       const priorityMatch = priorityFilter === "all" || lot.priority === priorityFilter;
-      return sectionMatch && statusMatch && priorityMatch;
+
+      // Search filter - case-insensitive match on lot name
+      const searchMatch = searchQuery.trim() === "" ||
+        lot.name.toLowerCase().includes(searchQuery.toLowerCase());
+
+      return sectionMatch && statusMatch && priorityMatch && searchMatch;
     });
-  }, [lots, sectionFilter, statusFilter, priorityFilter]);
+  }, [lots, sectionFilter, statusFilter, priorityFilter, searchQuery]);
 
   const lotToEdit = lots.find(l => l.id === selectedLotId);
   const lotToUpload = lots.find(l => l.id === uploadLotId);
@@ -739,6 +837,34 @@ const ParkingLotsScreen = ({
         {/* Filters - Hide in Map View */}
         {viewMode !== 'map' && (
           <>
+            {/* Search Input */}
+            <div className="mb-4">
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                Search Lots
+              </label>
+              <div className="relative">
+                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                  <Search size={18} className="text-gray-400 dark:text-gray-500" />
+                </div>
+                <input
+                  type="text"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  placeholder="Search lots by name..."
+                  className="w-full pl-10 pr-10 py-2 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 rounded-lg focus:ring-2 focus:ring-blue-500 dark:focus:ring-blue-400 focus:border-transparent"
+                />
+                {searchQuery && (
+                  <button
+                    onClick={() => setSearchQuery("")}
+                    className="absolute inset-y-0 right-0 pr-3 flex items-center text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
+                    aria-label="Clear search"
+                  >
+                    <X size={18} />
+                  </button>
+                )}
+              </div>
+            </div>
+
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               {/* Status Filter - MOVED TO FIRST POSITION */}
               <div>
@@ -800,13 +926,14 @@ const ParkingLotsScreen = ({
             </div>
 
             {/* Clear Filters Button */}
-            {(sectionFilter !== "all" || statusFilter !== "all" || priorityFilter !== "all") && (
+            {(sectionFilter !== "all" || statusFilter !== "all" || priorityFilter !== "all" || searchQuery !== "") && (
               <div className="mt-3">
                 <button
                   onClick={() => {
                     setSectionFilter("all");
                     setStatusFilter("all");
                     setPriorityFilter("all");
+                    setSearchQuery("");
                   }}
                   className="px-4 py-2 bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors text-sm"
                 >
@@ -857,7 +984,9 @@ const ParkingLotsScreen = ({
             {/* Empty State */}
             {filteredLots.length === 0 && (
               <div className="text-center py-12">
-                <p className="text-gray-500 dark:text-gray-400">No lots match the current filters.</p>
+                <p className="text-gray-500 dark:text-gray-400">
+                  {searchQuery ? `No lots found matching "${searchQuery}"` : 'No lots match the current filters.'}
+                </p>
               </div>
             )}
           </motion.div>
@@ -878,13 +1007,16 @@ const ParkingLotsScreen = ({
                 currentUser={currentUser}
                 onStatusChange={onLotStatusUpdate}
                 onEditClick={handleEditClick}
+                onUploadClick={handleUploadClick}
                 getStatusStyles={getStatusStyles}
                 statuses={statuses}
                 StatusBadge={StatusBadge}
               />
             ) : (
               <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-12 text-center">
-                <p className="text-gray-500 dark:text-gray-400">No lots match the current filters.</p>
+                <p className="text-gray-500 dark:text-gray-400">
+                  {searchQuery ? `No lots found matching "${searchQuery}"` : 'No lots match the current filters.'}
+                </p>
               </div>
             )}
           </motion.div>

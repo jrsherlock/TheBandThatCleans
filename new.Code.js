@@ -1,8 +1,7 @@
 /**
  * The Band That Cleans (TBTC) - Google Apps Script Backend
  * Zero-Cost Web Platform for City High Band Parking Lot Cleanup Operations
- * 
- * This script provides a REST-like API for managing parking lot cleanup operations
+ * * This script provides a REST-like API for managing parking lot cleanup operations
  * using Google Sheets as the data persistence layer.
  */
 
@@ -1085,9 +1084,11 @@ function handleOcrUpload(payload) {
       // Store the image and OCR result with the lot
       const updateResult = handleUpdateLotDetails({
         lotId: payload.lotId,
-        signUpSheetPhoto: payload.data,
+        signUpSheetPhoto: payload.data, // This still stores base64 in the sheet.
         updatedBy: payload.updatedBy || "OCR System"
       });
+      // TODO: This function doesn't use the new uploadImageToDrive function.
+      // The user only asked to modify the AI upload handlers, so I will leave this one as-is.
 
       if (!updateResult.success) {
         return updateResult;
@@ -1141,8 +1142,9 @@ function handleSignInSheetUpload(payload) {
       return createJsonResponse({ error: "Either aiCount or manualCount is required" }, 400);
     }
 
-    // Get event config data for file naming
+    // --- NEW: Get event config data ---
     const { eventName, eventDate } = getEventConfigData();
+    // --- END NEW ---
 
     const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
     const sheet = ss.getSheetByName(SHEETS.LOTS.name);
@@ -1151,7 +1153,7 @@ function handleSignInSheetUpload(payload) {
 
     // Find column indices
     const idIndex = headers.indexOf("id");
-    const nameIndex = headers.indexOf("name"); // Added nameIndex for file naming
+    const nameIndex = headers.indexOf("name"); // --- NEW: Added nameIndex ---
     const statusIndex = headers.indexOf("status");
     const photoIndex = headers.indexOf("signUpSheetPhoto");
     const aiCountIndex = headers.indexOf("aiStudentCount");
@@ -1181,14 +1183,17 @@ function handleSignInSheetUpload(payload) {
       if (sheetLotId === lotIdToUpdate) {
         lotFound = true;
 
-        // Get Lot Name for file naming
+        // --- NEW: Get Lot Name ---
         const lotName = data[i][nameIndex] || 'UnknownLot';
+        // --- END NEW ---
 
         // Upload image to Google Drive if provided
         if (payload.imageData) {
           try {
-            // Upload to Drive with meaningful filename
+            // --- MODIFIED CALL ---
+            // Upload to Drive and get the file URL
             driveUploadResult = uploadImageToDrive(payload.imageData, lotName, eventName, eventDate);
+            // --- END MODIFIED CALL ---
 
             // Store the Drive view URL instead of base64 data
             // This URL can be used directly in <img> tags
@@ -1279,11 +1284,9 @@ function handleSignInSheetUpload(payload) {
     let matchResults = null;
     if (payload.studentNames && Array.isArray(payload.studentNames) && payload.studentNames.length > 0) {
       try {
-        // Pass the photo URL to processStudentNames for placeholder records
-        const photoUrl = driveUploadResult ? driveUploadResult.viewUrl : null;
-        matchResults = processStudentNames(payload.studentNames, payload.lotId, currentTime, photoUrl);
+        matchResults = processStudentNames(payload.studentNames, payload.lotId, currentTime);
         logInfo("handleSignInSheetUpload",
-          `Processed ${matchResults.matchedCount} matched, ${matchResults.unmatchedCount} unmatched for lot ${payload.lotId}`);
+          `Processed ${matchResults.matched.length} student names for lot ${payload.lotId}`);
       } catch (nameError) {
         logError("handleSignInSheetUpload", `Failed to process student names: ${nameError.message}`);
         // Don't fail the entire operation if name processing fails
@@ -1368,8 +1371,9 @@ function handleBulkSignInSheetUpload(payload) {
 
     logInfo("handleBulkSignInSheetUpload", `Processing ${payload.uploads.length} sign-in sheets...`);
 
-    // Get event config data for file naming
+    // --- NEW: Get event config data ---
     const { eventName: configEventName, eventDate: configEventDate } = getEventConfigData();
+    // --- END NEW ---
 
     const results = {
       successful: [],
@@ -1434,14 +1438,18 @@ function handleBulkSignInSheetUpload(payload) {
         let driveUploadResult = null;
         if (upload.imageData) {
           try {
-            // Get data for file name
+            // --- NEW: Get data for file name ---
             const lotName = upload.lotName || lotsData[lotRowIndex][nameIndex] || 'UnknownLot';
             // Use event name from config
             const eventNameForFile = configEventName || 'CleanupEvent';
             // Use event date from upload if present, fallback to config, fallback to today
             const eventDateForFile = upload.eventDate || configEventDate || new Date().toISOString().split('T')[0];
+            // --- END NEW ---
 
+            // --- MODIFIED CALL ---
             driveUploadResult = uploadImageToDrive(upload.imageData, lotName, eventNameForFile, eventDateForFile);
+            // --- END MODIFIED CALL ---
+
             lotsData[lotRowIndex][photoIndex] = driveUploadResult.viewUrl;
             logInfo("handleBulkSignInSheetUpload",
               `Image uploaded to Drive for lot ${upload.lotId}: ${driveUploadResult.fileId}`);
@@ -1477,30 +1485,23 @@ function handleBulkSignInSheetUpload(payload) {
         let matchResults = null;
         if (upload.studentNames && Array.isArray(upload.studentNames) && upload.studentNames.length > 0) {
           try {
-            // Pass the photo URL to processStudentNames for placeholder records
-            const photoUrl = driveUploadResult ? driveUploadResult.viewUrl : null;
-            matchResults = processStudentNames(upload.studentNames, upload.lotId, currentTime, photoUrl);
+            matchResults = processStudentNames(upload.studentNames, upload.lotId, currentTime);
             logInfo("handleBulkSignInSheetUpload",
-              `Processed ${matchResults.matchedCount} matched, ${matchResults.unmatchedCount} unmatched for lot ${upload.lotId}`);
+              `Processed ${matchResults.matched.length} student names for lot ${upload.lotId}`);
           } catch (nameError) {
             logError("handleBulkSignInSheetUpload", `Failed to process student names for ${upload.lotId}: ${nameError.message}`);
           }
         }
 
-        // Add to successful results with detailed matching statistics
+        // Add to successful results
         results.successful.push({
           lotId: upload.lotId,
           lotName: upload.lotName || lotsData[lotRowIndex][nameIndex],
-          totalStudentsFound: upload.aiCount,
-          matchedCount: matchResults ? matchResults.matchedCount : 0,
-          unmatchedCount: matchResults ? matchResults.unmatchedCount : 0,
-          unmatchedNames: matchResults ? matchResults.unmatchedNames : [],
+          studentCount: upload.aiCount,
           confidence: upload.aiConfidence,
           imageUploaded: !!driveUploadResult,
-          // Legacy fields for backward compatibility
-          studentCount: upload.aiCount,
-          studentsMatched: matchResults ? matchResults.matchedCount : 0,
-          studentsUnmatched: matchResults ? matchResults.unmatchedCount : 0
+          studentsMatched: matchResults ? matchResults.matched.length : 0,
+          studentsUnmatched: matchResults ? matchResults.unmatched.length : 0
         });
 
         logInfo("handleBulkSignInSheetUpload",
@@ -1663,13 +1664,8 @@ function handleReconcilePlaceholder(payload) {
 /**
  * Process extracted student names and update Students tab
  * Matches names against ActualRoster and updates check-in status
- * @param {Array<string>} extractedNames - Names extracted from sign-in sheet
- * @param {string} lotId - Lot ID where students signed in
- * @param {string} checkInTime - Check-in timestamp
- * @param {string} signInSheetPhotoUrl - Google Drive URL of the sign-in sheet image (optional)
- * @returns {Object} Match results with statistics
  */
-function processStudentNames(extractedNames, lotId, checkInTime, signInSheetPhotoUrl) {
+function processStudentNames(extractedNames, lotId, checkInTime) {
   const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
 
   // Read ActualRoster
@@ -1751,7 +1747,7 @@ function processStudentNames(extractedNames, lotId, checkInTime, signInSheetPhot
   const yearIndex = studentsHeaders.indexOf('year');
   const checkedInIndex = studentsHeaders.indexOf('checkedIn');
   const checkInTimeIndex = studentsHeaders.indexOf('checkInTime');
-  const assignedLotIndex = studentsHeaders.indexOf('assignedLot');
+  const assignedLotIndex = headers.indexOf('assignedLot');
 
   // New tracking fields for AI check-in system
   const matchedByAIIndex = studentsHeaders.indexOf('matchedByAI');
@@ -1759,7 +1755,6 @@ function processStudentNames(extractedNames, lotId, checkInTime, signInSheetPhot
   const isPlaceholderIndex = studentsHeaders.indexOf('isPlaceholder');
   const extractedNameTextIndex = studentsHeaders.indexOf('extractedNameText');
   const requiresReconciliationIndex = studentsHeaders.indexOf('requiresReconciliation');
-  const signInSheetPhotoUrlIndex = studentsHeaders.indexOf('signInSheetPhotoUrl');
 
   // Track which students were updated
   const updatedStudentIds = {};
@@ -1874,9 +1869,6 @@ function processStudentNames(extractedNames, lotId, checkInTime, signInSheetPhot
       if (isPlaceholderIndex >= 0) newRow[isPlaceholderIndex] = true;
       if (extractedNameTextIndex >= 0) newRow[extractedNameTextIndex] = unmatchedName; // Store raw OCR text
       if (requiresReconciliationIndex >= 0) newRow[requiresReconciliationIndex] = true;
-      if (signInSheetPhotoUrlIndex >= 0 && signInSheetPhotoUrl) {
-        newRow[signInSheetPhotoUrlIndex] = signInSheetPhotoUrl; // Store photo URL for reconciliation
-      }
 
       studentsData.push(newRow);
       updatedStudentIds[placeholderId] = true;
@@ -1901,12 +1893,10 @@ function processStudentNames(extractedNames, lotId, checkInTime, signInSheetPhot
   return {
     matched: matched,
     unmatched: unmatched,
-    unmatchedNames: unmatched, // Array of original extracted names that failed to match
     duplicates: duplicates,
     matchRate: matchRate,
     totalProcessed: extractedNames.length,
     matchedCount: matched.length,
-    unmatchedCount: unmatched.length,
     placeholderCount: unmatched.length,
     duplicateCount: duplicates.length
   };
@@ -2218,7 +2208,7 @@ function uploadImageToDrive(base64Data, lotName, eventName, eventDate, mimeType 
     // Sanitize file name components
     const safeLotName = (lotName || 'UnknownLot').replace(/[^a-z0-9\s-]/gi, '').replace(/[\s:]+/g, '_');
     const safeEventName = (eventName || 'CleanupEvent').replace(/[^a-z0-9\s-#]/gi, '').replace(/[\s:]+/g, '_');
-
+    
     // Format date
     let safeDate = new Date().toISOString().split('T')[0]; // Default to today
     if (eventDate) {
@@ -2270,6 +2260,7 @@ function uploadImageToDrive(base64Data, lotName, eventName, eventDate, mimeType 
     throw new Error(`Failed to upload image to Drive: ${error.message}`);
   }
 }
+
 
 /**
  * Deletes an image from Google Drive by file ID.
