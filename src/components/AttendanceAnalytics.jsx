@@ -3,11 +3,15 @@
  * Displays attendance visualizations and statistics
  */
 
-import React, { useMemo, useEffect } from 'react';
-import { Users, TrendingUp, Award, BarChart3 } from 'lucide-react';
+import React, { useMemo, useEffect, useState } from 'react';
+import { Users, TrendingUp, Award, BarChart3, X } from 'lucide-react';
 import { motion } from 'framer-motion';
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell } from 'recharts';
 
 const AttendanceAnalytics = ({ students }) => {
+  const [selectedInstrument, setSelectedInstrument] = useState(null);
+  const [showInstrumentModal, setShowInstrumentModal] = useState(false);
+
   // Debug: Log students data
   useEffect(() => {
     console.log('=== ATTENDANCE ANALYTICS DEBUG ===');
@@ -139,30 +143,6 @@ const AttendanceAnalytics = ({ students }) => {
       totalEligible: stats.totalEligible
     })).sort((a, b) => b.avgAttendance - a.avgAttendance);
 
-    // Instrument comparison (grouped by instrument to compare trumpets vs trombones, etc.)
-    // FIXED: Only count past events, not all 7 events
-    const instrumentSectionStats = {};
-    students.forEach(s => {
-      const instrument = s.instrument || 'Unknown';
-      if (!instrumentSectionStats[instrument]) {
-        instrumentSectionStats[instrument] = { total: 0, attended: 0 };
-      }
-      instrumentSectionStats[instrument].total++;
-
-      let studentAttended = 0;
-      // Only count past events
-      pastEventFields.forEach(field => {
-        if (s[field] === 'X' || s[field] === 'x') studentAttended++;
-      });
-      instrumentSectionStats[instrument].attended += studentAttended;
-    });
-
-    const sectionComparison = Object.entries(instrumentSectionStats).map(([instrument, stats]) => ({
-      section: instrument, // Using 'section' key name for backward compatibility with display
-      // Use numPastEvents instead of hardcoded 7
-      avgAttendance: stats.total > 0 ? (stats.attended / (stats.total * numPastEvents) * 100).toFixed(1) : 0,
-      totalStudents: stats.total
-    })).sort((a, b) => b.avgAttendance - a.avgAttendance);
 
     // Overall stats - calculate total attendances from all students
     // FIXED: Only count past events, not all 7 events
@@ -195,12 +175,12 @@ const AttendanceAnalytics = ({ students }) => {
     return {
       eventAttendance,
       instrumentComparison,
-      sectionComparison,
       overallAttendanceRate,
       totalActualAttendances,
       totalPossibleAttendances,
       numPastEvents,
-      avgCleanupAttendance
+      avgCleanupAttendance,
+      eventDates: eventDates // Include event dates for modal
     };
   }, [students]);
 
@@ -323,7 +303,11 @@ const AttendanceAnalytics = ({ students }) => {
             {analytics.instrumentComparison.map((instrument, index) => (
               <div
                 key={instrument.instrument}
-                className="space-y-1"
+                className="space-y-1 cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700/50 p-2 rounded-lg transition-colors"
+                onClick={() => {
+                  setSelectedInstrument(instrument.instrument);
+                  setShowInstrumentModal(true);
+                }}
               >
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-3">
@@ -392,33 +376,220 @@ const AttendanceAnalytics = ({ students }) => {
           </div>
         </div>
 
-        {/* Instrument Comparison */}
-        <div className="bg-white dark:bg-gray-800 p-6 rounded-lg border border-gray-200 dark:border-gray-700 lg:col-span-2">
-          <h3 className="text-lg font-bold text-gray-900 dark:text-white mb-4 flex items-center gap-2">
-            <Users size={20} />
-            Attendance by Instrument
-          </h3>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            {analytics.sectionComparison.map((section) => (
-              <div
-                key={section.section}
-                className="p-4 bg-gray-50 dark:bg-gray-700/50 rounded-lg text-center"
-              >
-                <div className="text-2xl font-bold text-blue-600 dark:text-blue-400">
-                  {section.avgAttendance}%
-                </div>
-                <div className="text-sm font-medium text-gray-700 dark:text-gray-300 mt-1">
-                  {section.section}
-                </div>
-                <div className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                  {section.totalStudents} students
-                </div>
-              </div>
-            ))}
+      </div>
+
+      {/* Instrument Detail Modal */}
+      {showInstrumentModal && selectedInstrument && (
+        <InstrumentDetailModal
+          instrument={selectedInstrument}
+          students={students}
+          eventDates={analytics.eventDates}
+          eventAttendance={analytics.eventAttendance}
+          onClose={() => {
+            setShowInstrumentModal(false);
+            setSelectedInstrument(null);
+          }}
+        />
+      )}
+    </motion.div>
+  );
+};
+
+/**
+ * Modal component showing detailed attendance for a specific instrument
+ */
+const InstrumentDetailModal = ({ instrument, students, eventDates, eventAttendance, onClose }) => {
+  const eventFields = ['event1', 'event2', 'event3', 'event4', 'event5', 'event6', 'event7'];
+  
+  // Filter students by instrument
+  const instrumentStudents = students.filter(s => (s.instrument || 'Unknown') === instrument);
+
+  // Calculate weekly attendance for this instrument
+  const weeklyAttendanceData = eventFields.map((field, index) => {
+    const attended = instrumentStudents.filter(s => {
+      const val = s[field];
+      return val === 'X' || val === 'x';
+    }).length;
+    const total = instrumentStudents.length;
+    return {
+      event: `Event ${index + 1}`,
+      date: eventDates[index].toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
+      attended,
+      total,
+      percentage: total > 0 ? Math.round((attended / total) * 100) : 0
+    };
+  });
+
+  // Calculate student-level attendance
+  const studentAttendanceData = instrumentStudents.map(student => {
+    let totalAttended = 0;
+    const weeklyStatus = eventFields.map((field, index) => {
+      const value = student[field];
+      if (value === 'X' || value === 'x') {
+        totalAttended++;
+        return { event: index + 1, status: 'attended', date: eventDates[index] };
+      } else if (value === 'EX' || value === 'ex' || value === 'Ex') {
+        return { event: index + 1, status: 'excused', date: eventDates[index] };
+      }
+      return { event: index + 1, status: 'absent', date: eventDates[index] };
+    });
+
+    return {
+      name: student.name || 'Unknown',
+      instrument: student.instrument || 'Unknown',
+      section: student.section || 'Unknown',
+      year: student.year || student.grade || 'Unknown',
+      totalAttended,
+      totalEvents: eventFields.length,
+      weeklyStatus
+    };
+  }).sort((a, b) => b.totalAttended - a.totalAttended);
+
+  return (
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+      <motion.div
+        initial={{ opacity: 0, scale: 0.9 }}
+        animate={{ opacity: 1, scale: 1 }}
+        exit={{ opacity: 0, scale: 0.9 }}
+        className="bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-6xl w-full max-h-[90vh] overflow-hidden flex flex-col"
+      >
+        {/* Modal Header */}
+        <div className="flex items-center justify-between p-6 border-b border-gray-200 dark:border-gray-700">
+          <div>
+            <h2 className="text-2xl font-bold text-gray-900 dark:text-white">
+              {instrument} - Detailed Attendance
+            </h2>
+            <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
+              {instrumentStudents.length} student{instrumentStudents.length !== 1 ? 's' : ''}
+            </p>
+          </div>
+          <button
+            onClick={onClose}
+            className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
+          >
+            <X size={24} className="text-gray-600 dark:text-gray-400" />
+          </button>
+        </div>
+
+        {/* Modal Content */}
+        <div className="flex-1 overflow-y-auto p-6 space-y-6">
+          {/* Weekly Attendance Chart */}
+          <div className="bg-gray-50 dark:bg-gray-900/50 rounded-lg p-6">
+            <h3 className="text-lg font-bold text-gray-900 dark:text-white mb-4">
+              Weekly Attendance Totals
+            </h3>
+            <ResponsiveContainer width="100%" height={300}>
+              <BarChart data={weeklyAttendanceData}>
+                <CartesianGrid strokeDasharray="3 3" className="stroke-gray-300 dark:stroke-gray-700" />
+                <XAxis 
+                  dataKey="date" 
+                  className="text-xs"
+                  tick={{ fill: 'currentColor' }}
+                />
+                <YAxis 
+                  tick={{ fill: 'currentColor' }}
+                />
+                <Tooltip 
+                  contentStyle={{ 
+                    backgroundColor: 'var(--bg-color, white)',
+                    border: '1px solid var(--border-color, #e5e7eb)',
+                    borderRadius: '0.5rem'
+                  }}
+                  formatter={(value, name) => {
+                    if (name === 'attended') {
+                      const data = weeklyAttendanceData.find(d => d.attended === value);
+                      return [`${value} / ${data?.total || 0} (${data?.percentage || 0}%)`, 'Attended'];
+                    }
+                    return value;
+                  }}
+                />
+                <Bar dataKey="attended" fill="#3b82f6" radius={[4, 4, 0, 0]}>
+                  {weeklyAttendanceData.map((entry, index) => (
+                    <Cell 
+                      key={`cell-${index}`} 
+                      fill={entry.percentage >= 70 ? '#10b981' : entry.percentage >= 50 ? '#f59e0b' : '#ef4444'} 
+                    />
+                  ))}
+                </Bar>
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+
+          {/* Student List */}
+          <div>
+            <h3 className="text-lg font-bold text-gray-900 dark:text-white mb-4">
+              Student Attendance Breakdown
+            </h3>
+            <div className="overflow-x-auto">
+              <table className="w-full border-collapse">
+                <thead>
+                  <tr className="bg-gray-100 dark:bg-gray-700">
+                    <th className="border border-gray-300 dark:border-gray-600 px-4 py-2 text-left text-sm font-semibold text-gray-900 dark:text-white">
+                      Student Name
+                    </th>
+                    <th className="border border-gray-300 dark:border-gray-600 px-4 py-2 text-center text-sm font-semibold text-gray-900 dark:text-white">
+                      Section
+                    </th>
+                    <th className="border border-gray-300 dark:border-gray-600 px-4 py-2 text-center text-sm font-semibold text-gray-900 dark:text-white">
+                      Year
+                    </th>
+                    {eventFields.map((_, index) => (
+                      <th 
+                        key={index}
+                        className="border border-gray-300 dark:border-gray-600 px-2 py-2 text-center text-xs font-semibold text-gray-900 dark:text-white"
+                        title={eventDates[index].toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                      >
+                        E{index + 1}
+                      </th>
+                    ))}
+                    <th className="border border-gray-300 dark:border-gray-600 px-4 py-2 text-center text-sm font-semibold text-gray-900 dark:text-white">
+                      Total
+                    </th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {studentAttendanceData.map((student, idx) => (
+                    <tr 
+                      key={idx}
+                      className="hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors"
+                    >
+                      <td className="border border-gray-300 dark:border-gray-600 px-4 py-2 text-sm text-gray-900 dark:text-white">
+                        {student.name}
+                      </td>
+                      <td className="border border-gray-300 dark:border-gray-600 px-4 py-2 text-sm text-center text-gray-700 dark:text-gray-300">
+                        {student.section}
+                      </td>
+                      <td className="border border-gray-300 dark:border-gray-600 px-4 py-2 text-sm text-center text-gray-700 dark:text-gray-300">
+                        {student.year}
+                      </td>
+                      {student.weeklyStatus.map((status, eventIdx) => (
+                        <td 
+                          key={eventIdx}
+                          className="border border-gray-300 dark:border-gray-600 px-2 py-2 text-center text-xs"
+                        >
+                          {status.status === 'attended' && (
+                            <span className="text-green-600 dark:text-green-400 font-bold">✓</span>
+                          )}
+                          {status.status === 'excused' && (
+                            <span className="text-yellow-600 dark:text-yellow-400">EX</span>
+                          )}
+                          {status.status === 'absent' && (
+                            <span className="text-gray-400 dark:text-gray-600">-</span>
+                          )}
+                        </td>
+                      ))}
+                      <td className="border border-gray-300 dark:border-gray-600 px-4 py-2 text-sm text-center font-semibold text-gray-900 dark:text-white">
+                        {student.totalAttended} / {student.totalEvents}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           </div>
         </div>
-      </div>
-    </motion.div>
+      </motion.div>
+    </div>
   );
 };
 
