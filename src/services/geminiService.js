@@ -9,10 +9,10 @@ import { GoogleGenerativeAI } from '@google/generative-ai';
 const API_KEY = import.meta.env.VITE_GEMINI_API_KEY;
 
 // List of models to try in order of preference
-// Google has updated model names - using stable 1.5 models
+// Using correct model names for v1beta API
 const MODEL_PRIORITY = [
-  'gemini-1.5-flash',          // Standard 1.5 flash (Recommended for speed/cost)
-  'gemini-1.5-pro',            // Standard 1.5 pro (Higher intelligence)
+  'gemini-1.5-flash-latest',   // Latest 1.5 flash (Recommended for speed/cost)
+  'gemini-1.5-pro-latest',     // Latest 1.5 pro (Higher intelligence)
 ];
 
 const MODEL_NAME = MODEL_PRIORITY[0];
@@ -173,6 +173,22 @@ Be precise and thorough. Extract all readable names, even if handwriting is impe
 
       } catch (error) {
         lastError = error;
+        const errorMessage = error.message || '';
+        
+        // Handle rate limiting (429) - wait before trying next model
+        if (errorMessage.includes('429') || errorMessage.includes('Too Many Requests') || errorMessage.includes('RESOURCE_EXHAUSTED')) {
+          console.warn(`⚠️ Rate limit hit for ${modelName}. Waiting 60 seconds before trying next model...`);
+          
+          // Wait 60 seconds before trying next model (rate limits are usually per minute)
+          if (i < allModels.length - 1) {
+            await new Promise(resolve => setTimeout(resolve, 60000));
+            console.log(`📋 Trying next fallback model after rate limit wait...`);
+            continue;
+          } else {
+            throw new Error('API rate limit exceeded. Please wait a few minutes and try again.');
+          }
+        }
+        
         console.warn(`⚠️ Model ${modelName} failed: ${error.message}`);
 
         // If this is the last model, throw the error
@@ -255,8 +271,8 @@ Be precise and thorough. Extract all readable names, even if handwriting is impe
       throw new Error('Invalid API key. Please check your Gemini API configuration in the .env file.');
     }
 
-    if (error.message?.includes('quota') || error.message?.includes('RESOURCE_EXHAUSTED')) {
-      throw new Error('API quota exceeded. Please try again later or contact support.');
+    if (error.message?.includes('quota') || error.message?.includes('RESOURCE_EXHAUSTED') || error.message?.includes('429') || error.message?.includes('Too Many Requests') || error.message?.includes('rate limit')) {
+      throw new Error('API rate limit exceeded. Please wait a few minutes and try again. You may have made too many requests in a short time.');
     }
 
     if (error.message?.includes('not found') || error.message?.includes('404')) {
@@ -294,8 +310,10 @@ function getAvailableModel() {
   // Ignore env variable if it points to deprecated models, otherwise prioritize it
   if (import.meta.env.VITE_GEMINI_MODEL) {
     const envModel = import.meta.env.VITE_GEMINI_MODEL;
-    if (envModel === 'gemini-pro-vision' || envModel === 'gemini-pro') {
-       console.warn(`⚠️ VITE_GEMINI_MODEL is set to deprecated "${envModel}". Ignoring and using stable defaults.`);
+    // Filter out deprecated or problematic models
+    if (envModel === 'gemini-pro-vision' || envModel === 'gemini-pro' || 
+        envModel === 'gemini-1.5-flash' || envModel === 'gemini-1.5-pro') {
+       console.warn(`⚠️ VITE_GEMINI_MODEL is set to "${envModel}" which may not be available. Using stable defaults.`);
     } else {
        modelsToTry.push(envModel);
     }
@@ -599,6 +617,22 @@ Be precise and thorough. Extract all readable information from the header and st
 
       } catch (error) {
         lastError = error;
+        const errorMessage = error.message || '';
+        
+        // Handle rate limiting (429) - wait before trying next model
+        if (errorMessage.includes('429') || errorMessage.includes('Too Many Requests') || errorMessage.includes('RESOURCE_EXHAUSTED')) {
+          console.warn(`⚠️ Rate limit hit for ${modelName}. Waiting 60 seconds before trying next model...`);
+          
+          // Wait 60 seconds before trying next model (rate limits are usually per minute)
+          if (i < allModels.length - 1) {
+            await new Promise(resolve => setTimeout(resolve, 60000));
+            console.log(`📋 Trying next fallback model after rate limit wait...`);
+            continue;
+          } else {
+            throw new Error('API rate limit exceeded. Please wait a few minutes and try again.');
+          }
+        }
+        
         console.warn(`⚠️ Model ${modelName} failed: ${error.message}`);
 
         // If this is the last model, throw the error
@@ -681,8 +715,8 @@ Be precise and thorough. Extract all readable information from the header and st
       throw new Error('Invalid API key. Please check your Gemini API configuration in the .env file.');
     }
 
-    if (error.message?.includes('quota') || error.message?.includes('RESOURCE_EXHAUSTED')) {
-      throw new Error('API quota exceeded. Please try again later or contact support.');
+    if (error.message?.includes('quota') || error.message?.includes('RESOURCE_EXHAUSTED') || error.message?.includes('429') || error.message?.includes('Too Many Requests') || error.message?.includes('rate limit')) {
+      throw new Error('API rate limit exceeded. Please wait a few minutes and try again. You may have made too many requests in a short time.');
     }
 
     if (error.message?.includes('not found') || error.message?.includes('404')) {
