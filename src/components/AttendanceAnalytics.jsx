@@ -6,7 +6,7 @@
 import React, { useMemo, useEffect, useState } from 'react';
 import { Users, TrendingUp, Award, BarChart3, X } from 'lucide-react';
 import { motion } from 'framer-motion';
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell } from 'recharts';
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell, ReferenceLine, LabelList } from 'recharts';
 
 const AttendanceAnalytics = ({ students }) => {
   const [selectedInstrument, setSelectedInstrument] = useState(null);
@@ -385,6 +385,7 @@ const AttendanceAnalytics = ({ students }) => {
           students={students}
           eventDates={analytics.eventDates}
           eventAttendance={analytics.eventAttendance}
+          instrumentComparison={analytics.instrumentComparison}
           onClose={() => {
             setShowInstrumentModal(false);
             setSelectedInstrument(null);
@@ -398,27 +399,65 @@ const AttendanceAnalytics = ({ students }) => {
 /**
  * Modal component showing detailed attendance for a specific instrument
  */
-const InstrumentDetailModal = ({ instrument, students, eventDates, eventAttendance, onClose }) => {
+const InstrumentDetailModal = ({ instrument, students, eventDates, eventAttendance, instrumentComparison, onClose }) => {
   const eventFields = ['event1', 'event2', 'event3', 'event4', 'event5', 'event6', 'event7'];
   
   // Filter students by instrument
   const instrumentStudents = students.filter(s => (s.instrument || 'Unknown') === instrument);
+  const totalStudents = instrumentStudents.length;
+  
+  // Calculate max Y-axis (total students in this section)
+  const maxY = totalStudents;
 
-  // Calculate weekly attendance for this instrument
+  // Calculate weekly attendance for this instrument and rankings
   const weeklyAttendanceData = eventFields.map((field, index) => {
     const attended = instrumentStudents.filter(s => {
       const val = s[field];
       return val === 'X' || val === 'x';
     }).length;
-    const total = instrumentStudents.length;
+    const total = totalStudents;
+    const percentage = total > 0 ? Math.round((attended / total) * 100) : 0;
+    
+    // Calculate ranking for this week by comparing to all instruments
+    // Get attendance percentage for each instrument for this event
+    const instrumentStatsForEvent = {};
+    students.forEach(s => {
+      const inst = s.instrument || 'Unknown';
+      if (!instrumentStatsForEvent[inst]) {
+        instrumentStatsForEvent[inst] = { total: 0, attended: 0 };
+      }
+      instrumentStatsForEvent[inst].total++;
+      const val = s[field];
+      if (val === 'X' || val === 'x') {
+        instrumentStatsForEvent[inst].attended++;
+      }
+    });
+    
+    // Calculate percentage for each instrument and sort
+    const rankings = Object.entries(instrumentStatsForEvent)
+      .map(([inst, stats]) => ({
+        instrument: inst,
+        percentage: stats.total > 0 ? (stats.attended / stats.total) * 100 : 0
+      }))
+      .sort((a, b) => b.percentage - a.percentage);
+    
+    // Find this instrument's rank (1st, 2nd, 3rd, or null)
+    const rankIndex = rankings.findIndex(r => r.instrument === instrument);
+    const rank = rankIndex >= 0 && rankIndex < 3 ? rankIndex + 1 : null;
+    
     return {
       event: `Event ${index + 1}`,
       date: eventDates[index].toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
       attended,
       total,
-      percentage: total > 0 ? Math.round((attended / total) * 100) : 0
+      percentage,
+      rank // 1, 2, 3, or null
     };
   });
+  
+  // Calculate threshold values for reference lines
+  const threshold70 = Math.round(maxY * 0.70);
+  const threshold50 = Math.round(maxY * 0.50);
 
   // Calculate student-level attendance
   const studentAttendanceData = instrumentStudents.map(student => {
@@ -478,8 +517,8 @@ const InstrumentDetailModal = ({ instrument, students, eventDates, eventAttendan
             <h3 className="text-lg font-bold text-gray-900 dark:text-white mb-4">
               Weekly Attendance Totals
             </h3>
-            <ResponsiveContainer width="100%" height={300}>
-              <BarChart data={weeklyAttendanceData}>
+            <ResponsiveContainer width="100%" height={350}>
+              <BarChart data={weeklyAttendanceData} margin={{ top: 20, right: 30, left: 20, bottom: 5 }}>
                 <CartesianGrid strokeDasharray="3 3" className="stroke-gray-300 dark:stroke-gray-700" />
                 <XAxis 
                   dataKey="date" 
@@ -487,7 +526,24 @@ const InstrumentDetailModal = ({ instrument, students, eventDates, eventAttendan
                   tick={{ fill: 'currentColor' }}
                 />
                 <YAxis 
+                  domain={[0, maxY]}
                   tick={{ fill: 'currentColor' }}
+                  label={{ value: 'Students', angle: -90, position: 'insideLeft' }}
+                />
+                {/* Threshold reference lines */}
+                <ReferenceLine 
+                  y={threshold70} 
+                  stroke="#10b981" 
+                  strokeDasharray="5 5" 
+                  strokeWidth={2}
+                  label={{ value: "70%", position: "right", fill: "#10b981", fontSize: 12 }}
+                />
+                <ReferenceLine 
+                  y={threshold50} 
+                  stroke="#f59e0b" 
+                  strokeDasharray="5 5" 
+                  strokeWidth={2}
+                  label={{ value: "50%", position: "right", fill: "#f59e0b", fontSize: 12 }}
                 />
                 <Tooltip 
                   contentStyle={{ 
@@ -510,6 +566,42 @@ const InstrumentDetailModal = ({ instrument, students, eventDates, eventAttendan
                       fill={entry.percentage >= 70 ? '#10b981' : entry.percentage >= 50 ? '#f59e0b' : '#ef4444'} 
                     />
                   ))}
+                  <LabelList 
+                    dataKey="rank" 
+                    content={({ x, y, width, value }) => {
+                      if (!value || value > 3) return null;
+                      const colors = {
+                        1: { bg: '#fbbf24', text: '#78350f' }, // Gold
+                        2: { bg: '#94a3b8', text: '#1e293b' }, // Silver
+                        3: { bg: '#f97316', text: '#7c2d12' }  // Bronze
+                      };
+                      const color = colors[value];
+                      return (
+                        <g>
+                          <rect
+                            x={x + width / 2 - 12}
+                            y={y - 25}
+                            width={24}
+                            height={20}
+                            fill={color.bg}
+                            rx={2}
+                            stroke={color.text}
+                            strokeWidth={1}
+                          />
+                          <text
+                            x={x + width / 2}
+                            y={y - 12}
+                            fill={color.text}
+                            textAnchor="middle"
+                            fontSize={11}
+                            fontWeight="bold"
+                          >
+                            {value === 1 ? '🥇' : value === 2 ? '🥈' : '🥉'}
+                          </text>
+                        </g>
+                      );
+                    }}
+                  />
                 </Bar>
               </BarChart>
             </ResponsiveContainer>
