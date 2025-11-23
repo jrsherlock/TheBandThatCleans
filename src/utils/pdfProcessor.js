@@ -64,11 +64,20 @@ export async function extractPDFPagesToImages(pdfFile, options = {}) {
     const arrayBuffer = await pdfFile.arrayBuffer();
     
     // Load the PDF document
-    const loadingTask = pdfjsLib.getDocument({ data: arrayBuffer });
+    // Use standard font/cmap settings to ensure better compatibility
+    const loadingTask = pdfjsLib.getDocument({ 
+      data: arrayBuffer,
+      cMapUrl: `https://unpkg.com/pdfjs-dist@${pdfjsLib.version}/cmaps/`,
+      cMapPacked: true,
+    });
     const pdf = await loadingTask.promise;
     
     const numPages = pdf.numPages;
     console.log(`📄 PDF has ${numPages} pages`);
+
+    if (numPages === 0) {
+      throw new Error('PDF has 0 pages');
+    }
 
     const imageFiles = [];
 
