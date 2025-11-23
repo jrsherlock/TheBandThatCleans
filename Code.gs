@@ -2009,7 +2009,8 @@ function handleGetReport() {
  * Handles resetting the database for testing/development purposes
  * Clears data from Students, AttendanceLog, and EventConfig tabs
  * Resets lot statuses to "ready" and clears student count/timing data from Lots sheet
- * Preserves ActualRoster completely
+ * Clears all weekly attendance data (event1-event7) from ActualRoster sheet
+ * Preserves student roster data (name, instrument, grade, section) in ActualRoster
  */
 function handleResetDatabase(payload) {
   try {
@@ -2081,6 +2082,8 @@ function handleResetDatabase(payload) {
         'aiAnalysisTimestamp',
         'countSource',
         'countEnteredBy',
+        'aiMatchedCount',     // Event-specific matched/unmatched counts
+        'aiUnmatchedCount',
         'signUpSheetPhoto',
         'comment'
       ];
@@ -2126,17 +2129,57 @@ function handleResetDatabase(payload) {
       }
     }
 
-    // NOTE: We do NOT touch ActualRoster sheet as requested
+    // 5. Clear weekly attendance data (event1-event7) from ActualRoster sheet
+    // Preserve student roster data (name, instrument, grade, section) but clear all event attendance
+    const actualRosterSheet = ss.getSheetByName(SHEETS.ACTUAL_ROSTER.name);
+    if (actualRosterSheet) {
+      const data = actualRosterSheet.getDataRange().getValues();
+      if (data.length > 1) { // Has data rows beyond header
+        const headers = data[0];
+        
+        // Find indices for event columns (event1-event7)
+        const eventColumns = ['event1', 'event2', 'event3', 'event4', 'event5', 'event6', 'event7'];
+        const eventColumnIndices = [];
+        
+        eventColumns.forEach(eventCol => {
+          const index = headers.indexOf(eventCol);
+          if (index !== -1) {
+            eventColumnIndices.push(index);
+          }
+        });
+        
+        // Clear event columns for all data rows
+        let clearedEventCells = 0;
+        for (let i = 1; i < data.length; i++) {
+          eventColumnIndices.forEach(colIndex => {
+            if (data[i][colIndex] !== '') {
+              data[i][colIndex] = '';
+              clearedEventCells++;
+            }
+          });
+        }
+        
+        // Write updated data back to sheet
+        if (clearedEventCells > 0) {
+          actualRosterSheet.getRange(1, 1, data.length, data[0].length).setValues(data);
+          resetSheets.push("ActualRoster (event columns cleared)");
+          logInfo("handleResetDatabase",
+            `Cleared ${clearedEventCells} event attendance cells from ActualRoster sheet (preserved student roster data)`);
+        } else {
+          logInfo("handleResetDatabase", "ActualRoster event columns already empty");
+        }
+      }
+    }
 
     logInfo("handleResetDatabase",
       `Database reset complete. Reset sheets: ${resetSheets.join(", ")}. Cleared Lots columns: ${clearedColumns.join(", ")}`);
 
     return createJsonResponse({
       success: true,
-      message: "Database reset successfully - all lots set to 'ready' status",
+      message: "Database reset successfully - all lots set to 'ready' status, all weekly attendance data cleared",
       resetSheets: resetSheets,
       clearedLotsColumns: clearedColumns,
-      preservedSheets: ["ActualRoster"],
+      preservedSheets: ["ActualRoster (student roster preserved)"],
       preservedLotsData: ["id", "name", "zone", "coordinates", "etc."],
       timestamp: new Date().toISOString()
     });
