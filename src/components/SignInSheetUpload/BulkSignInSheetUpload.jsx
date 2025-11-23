@@ -377,6 +377,11 @@ const BulkSignInSheetUpload = ({
                               <div className="font-medium">
                                 ✓ {item.lotName}: {totalStudents} student{totalStudents !== 1 ? 's' : ''} found
                               </div>
+                              {item.detectedLotName && item.detectedLotName !== item.lotName && (
+                                <div className="ml-4 text-xs text-blue-600 dark:text-blue-400">
+                                  • Detected as: "{item.detectedLotName}" → Matched to: "{item.lotName}"
+                                </div>
+                              )}
                               {totalStudents > 0 && (
                                 <div className="ml-4 text-xs space-y-0.5">
                                   {allMatched ? (

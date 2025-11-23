@@ -589,21 +589,49 @@ function findMatchingLot(identifiedLotName: string, availableLots: Lot[]): Lot |
     return match;
   }
 
-  // Try partial match (contains)
-  match = availableLots.find(
-    (lot) =>
-      lot.name.toLowerCase().includes(normalized) || normalized.includes(lot.name.toLowerCase())
-  );
+  // Try partial match (contains) - but prefer more specific matches
+  // First try if lot name contains the identified name (more specific)
+  match = availableLots.find((lot) => lot.name.toLowerCase().includes(normalized));
 
   if (match) {
-    console.log(`✅ Partial match: "${identifiedLotName}" → ${match.name}`);
+    console.log(`✅ Partial match (lot contains identified): "${identifiedLotName}" → ${match.name}`);
     return match;
   }
 
-  // Try matching just the lot number (e.g., "Lot 3" or "3")
-  const lotNumberMatch = normalized.match(/lot\s*(\d+)|^(\d+)$/i);
-  if (lotNumberMatch) {
-    const lotNumber = lotNumberMatch[1] || lotNumberMatch[2];
+  // Then try if identified name contains lot name (less specific, but still valid)
+  match = availableLots.find((lot) => normalized.includes(lot.name.toLowerCase()));
+
+  if (match) {
+    console.log(`✅ Partial match (identified contains lot): "${identifiedLotName}" → ${match.name}`);
+    return match;
+  }
+
+  // Try matching lot number with directional suffix (e.g., "Lot 43 NW" or "43 NW")
+  // Extract lot number and direction (N, NW, NE, S, SW, SE, W, E, etc.)
+  const lotNumberWithDirection = normalized.match(/lot\s*(\d+)\s*([nsew]+)?|^(\d+)\s*([nsew]+)?/i);
+  if (lotNumberWithDirection) {
+    const lotNumber = lotNumberWithDirection[1] || lotNumberWithDirection[3];
+    const direction = (lotNumberWithDirection[2] || lotNumberWithDirection[4] || '').toLowerCase();
+    
+    // Try to find lot with matching number and direction
+    if (direction) {
+      match = availableLots.find((lot) => {
+        const lotNameLower = lot.name.toLowerCase();
+        const hasNumber = lotNameLower.includes(`lot ${lotNumber}`) || lotNameLower.includes(`lot${lotNumber}`);
+        const hasDirection = lotNameLower.includes(direction) || 
+                            lotNameLower.includes(` ${direction} `) ||
+                            lotNameLower.includes(`- ${direction}`) ||
+                            lotNameLower.endsWith(` ${direction}`);
+        return hasNumber && hasDirection;
+      });
+
+      if (match) {
+        console.log(`✅ Lot number + direction match: "${identifiedLotName}" → ${match.name}`);
+        return match;
+      }
+    }
+    
+    // Fallback: just match by lot number (less precise)
     match = availableLots.find(
       (lot) =>
         lot.name.toLowerCase().includes(`lot ${lotNumber}`) ||
@@ -611,12 +639,13 @@ function findMatchingLot(identifiedLotName: string, availableLots: Lot[]): Lot |
     );
 
     if (match) {
-      console.log(`✅ Lot number match: "${identifiedLotName}" → ${match.name}`);
+      console.log(`⚠️ Lot number match (no direction): "${identifiedLotName}" → ${match.name} (may be incorrect if multiple lots share this number)`);
       return match;
     }
   }
 
   console.warn(`⚠️ No match found for: "${identifiedLotName}"`);
+  console.warn(`Available lots: ${availableLots.map(l => l.name).join(', ')}`);
   return null;
 }
 
@@ -691,6 +720,7 @@ export async function analyzeBulkSignInSheets(
         fileName: imageFile.name,
         lotId: matchedLot.id,
         lotName: matchedLot.name,
+        detectedLotName: analysis.lotIdentified, // Store the original detected name for comparison
         studentCount: analysis.count,
         studentNames: analysis.studentNames,
         illegibleNames: analysis.illegibleNames,
@@ -702,7 +732,12 @@ export async function analyzeBulkSignInSheets(
         analysis: analysis,
       });
 
-      console.log(`✅ Success: ${imageFile.name} → ${matchedLot.name} (${analysis.count} students)`);
+      // Log match details for debugging
+      if (analysis.lotIdentified !== matchedLot.name) {
+        console.log(`✅ Success (matched): "${analysis.lotIdentified}" → ${matchedLot.name} (${analysis.count} students)`);
+      } else {
+        console.log(`✅ Success: ${imageFile.name} → ${matchedLot.name} (${analysis.count} students)`);
+      }
     } catch (error: any) {
       console.error(`❌ Failed: ${imageFile.name}`, error);
       

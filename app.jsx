@@ -801,6 +801,11 @@ const App = () => {
           // Convert image to base64
           const base64Image = await fileToBase64(result.imageFile);
 
+          // Log lot matching details for debugging
+          if (result.detectedLotName && result.detectedLotName !== result.lotName) {
+            console.log(`📋 Lot matching: Detected "${result.detectedLotName}" → Matched to "${result.lotName}" (ID: ${result.lotId})`);
+          }
+
           return {
             lotId: result.lotId,
             lotName: result.lotName,
