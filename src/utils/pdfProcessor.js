@@ -6,9 +6,13 @@
 import * as pdfjsLib from 'pdfjs-dist';
 
 // Set up the worker for pdf.js
-// Use a CDN that supports CORS and works in all environments
+// Use Vite's import.meta.url to correctly resolve the worker path
+// This works reliably in both development and production builds
 if (typeof window !== 'undefined') {
-  pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.js`;
+  pdfjsLib.GlobalWorkerOptions.workerSrc = new URL(
+    'pdfjs-dist/build/pdf.worker.min.mjs',
+    import.meta.url
+  ).href;
 }
 
 /**
