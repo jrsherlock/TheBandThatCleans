@@ -830,9 +830,19 @@ const App = () => {
         manualRefresh();
       }, 500);
 
-      // Return combined results
+      // Return combined results with detailed matching info
+      const combinedSuccessful = (uploadResults.successful || []).map((uploadResult, idx) => {
+        const analysisResult = analysisResults.successful[idx];
+        return {
+          ...uploadResult,
+          detectedLotName: analysisResult?.detectedLotName || analysisResult?.analysis?.lotIdentified,
+          matchedLotName: analysisResult?.lotName,
+          lotId: analysisResult?.lotId
+        };
+      });
+
       return {
-        successful: uploadResults.successful || [],
+        successful: combinedSuccessful,
         failed: [
           ...(uploadResults.failed || []),
           ...analysisResults.failed
