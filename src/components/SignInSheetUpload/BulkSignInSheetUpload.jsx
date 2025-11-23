@@ -299,11 +299,11 @@ const BulkSignInSheetUpload = ({
                         <FileText className="text-gray-400 dark:text-gray-500" size={48} />
                       </div>
                     ) : (
-                      <img
-                        src={fileItem.preview}
-                        alt={fileItem.file.name}
-                        className="w-full h-32 object-cover"
-                      />
+                    <img
+                      src={fileItem.preview}
+                      alt={fileItem.file.name}
+                      className="w-full h-32 object-cover"
+                    />
                     )}
                     <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
                       <button
@@ -415,10 +415,11 @@ const BulkSignInSheetUpload = ({
                       <h4 className="font-semibold text-red-900 dark:text-red-100 mb-2">
                         Failed to Process ({results.failed.length})
                       </h4>
-                      <ul className="space-y-1 text-sm text-red-800 dark:text-red-200">
+                      <ul className="space-y-2 text-sm text-red-800 dark:text-red-200">
                         {results.failed.map((item, idx) => (
-                          <li key={idx}>
-                            ✗ {item.fileName}: {item.error}
+                          <li key={idx} className="border-l-2 border-red-400 pl-2">
+                            <div className="font-medium">✗ {item.fileName}</div>
+                            <div className="text-xs mt-0.5 opacity-90">{item.error}</div>
                           </li>
                         ))}
                       </ul>

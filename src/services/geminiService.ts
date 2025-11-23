@@ -695,9 +695,41 @@ export async function analyzeBulkSignInSheets(
       console.log(`✅ Success: ${imageFile.name} → ${matchedLot.name} (${analysis.count} students)`);
     } catch (error: any) {
       console.error(`❌ Failed: ${imageFile.name}`, error);
+      
+      // Create a more descriptive error message
+      let errorMessage = 'Processing failed';
+      
+      if (error.message) {
+        errorMessage = error.message;
+        
+        // Add more context for common errors
+        if (error.message.includes('API key') || error.message.includes('API_KEY_INVALID')) {
+          errorMessage = 'Gemini API key not configured. Please check your environment settings.';
+        } else if (error.message.includes('429') || error.message.includes('Too Many Requests')) {
+          errorMessage = 'API rate limit exceeded. Please wait a few minutes and try again.';
+        } else if (error.message.includes('404') || error.message.includes('not found')) {
+          errorMessage = 'AI model not available. The service may be updating. Please try again later.';
+        } else if (error.message.includes('Could not match lot')) {
+          errorMessage = `Could not identify parking lot from image. Found: "${error.message.split('"')[1] || 'unknown'}". Please check the image quality or try manual entry.`;
+        } else if (error.message.includes('Failed to parse')) {
+          errorMessage = 'AI response format error. The image may be unclear or corrupted. Please try a clearer image.';
+        } else if (error.message.includes('file too large') || error.message.includes('size')) {
+          errorMessage = 'Image file is too large. Please compress the image or use a smaller file.';
+        } else if (error.message.includes('Invalid file type')) {
+          errorMessage = 'Invalid file format. Please use JPEG, PNG, or PDF files only.';
+        } else if (error.message.includes('network') || error.message.includes('fetch')) {
+          errorMessage = 'Network error. Please check your internet connection and try again.';
+        } else if (error.message.includes('timeout')) {
+          errorMessage = 'Request timed out. The image may be too large or the service is slow. Please try again.';
+        }
+      } else if (error.toString) {
+        errorMessage = error.toString();
+      }
+      
       results.failed.push({
         fileName: imageFile.name,
-        error: error.message || 'Processing failed',
+        error: errorMessage,
+        originalError: error.message || error.toString() || 'Unknown error',
       });
     }
 
