@@ -17,10 +17,9 @@ import { AnalysisResult, Lot } from '../types';
 const API_KEY = import.meta.env.VITE_GEMINI_API_KEY || '';
 
 // Use Flash for speed and stability - optimized for high-volume bulk image processing
-// Flash is significantly faster (1-2s vs 10-20s), cheaper, and more reliable for bulk uploads
+// gemini-1.5-flash returns 404, so using gemini-2.5-flash as primary
 const MODEL_PRIORITY = [
-  'gemini-1.5-flash',  // Primary: Fast, reliable, optimized for bulk image processing
-  'gemini-2.5-flash',  // Fallback: Latest stable model if 1.5-flash unavailable
+  'gemini-2.5-flash',  // Primary: Latest stable model (gemini-1.5-flash returns 404)
 ];
 
 // Initialize AI client
