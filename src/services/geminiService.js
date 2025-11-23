@@ -9,17 +9,13 @@ import { GoogleGenerativeAI } from '@google/generative-ai';
 const API_KEY = import.meta.env.VITE_GEMINI_API_KEY;
 
 // List of models to try in order of preference
-// Google has updated model names - try newer models first, fall back to older ones
+// Google has updated model names - using stable 1.5 models
 const MODEL_PRIORITY = [
-  'gemini-2.0-flash-exp',      // Latest experimental model
-  'gemini-1.5-flash-latest',   // Latest stable 1.5 flash
-  'gemini-1.5-flash',          // Standard 1.5 flash
-  'gemini-1.5-pro-latest',     // Latest stable 1.5 pro
-  'gemini-1.5-pro',            // Standard 1.5 pro
-  'gemini-pro-vision'          // Fallback to older vision model
+  'gemini-1.5-flash',          // Standard 1.5 flash (Recommended for speed/cost)
+  'gemini-1.5-pro',            // Standard 1.5 pro (Higher intelligence)
 ];
 
-const MODEL_NAME = import.meta.env.VITE_GEMINI_MODEL || MODEL_PRIORITY[0];
+const MODEL_NAME = MODEL_PRIORITY[0];
 
 // Validate API key on module load
 if (!API_KEY || API_KEY === 'your_gemini_api_key_here') {
@@ -295,9 +291,14 @@ function getAvailableModel() {
   // Build list of models to try
   const modelsToTry = [];
 
-  // If user specified a model in env, add it first
+  // Ignore env variable if it points to deprecated models, otherwise prioritize it
   if (import.meta.env.VITE_GEMINI_MODEL) {
-    modelsToTry.push(import.meta.env.VITE_GEMINI_MODEL);
+    const envModel = import.meta.env.VITE_GEMINI_MODEL;
+    if (envModel === 'gemini-pro-vision' || envModel === 'gemini-pro') {
+       console.warn(`⚠️ VITE_GEMINI_MODEL is set to deprecated "${envModel}". Ignoring and using stable defaults.`);
+    } else {
+       modelsToTry.push(envModel);
+    }
   }
 
   // Add all priority models
