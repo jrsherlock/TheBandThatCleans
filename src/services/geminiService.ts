@@ -351,7 +351,17 @@ Be precise and thorough. Extract all readable names, even if handwriting is impe
       throw new Error('Network error. Please check your internet connection and try again.');
     }
 
-    throw new Error(`Failed to analyze image: ${error.message}`);
+    if (error.message?.includes('timeout')) {
+      throw new Error('Request timed out. The image may be too large or the service is slow. Please try a smaller image or try again.');
+    }
+
+    if (error.message?.includes('Failed to parse') || error.message?.includes('JSON')) {
+      throw new Error('AI response format error. The image may be unclear or corrupted. Please try a clearer image.');
+    }
+
+    // Generic error with more context
+    const errorDetails = error.message || 'Unknown error occurred';
+    throw new Error(`Failed to analyze image: ${errorDetails}. If this persists, try a different image or use manual entry.`);
   }
 }
 
