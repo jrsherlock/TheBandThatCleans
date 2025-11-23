@@ -589,41 +589,64 @@ function findMatchingLot(identifiedLotName: string, availableLots: Lot[]): Lot |
     return match;
   }
 
-  // Handle combined lot names (e.g., "Softball Lot and Soccer Lot")
+  // Handle combined lot names (e.g., "Softball Lot and Soccer Lot" or "Softball Lot AND Soccer Lot")
   // Check if the identified name contains "and" or "&" indicating multiple lots
-  const combinedMatch = normalized.match(/(.+?)\s+(?:and|&)\s+(.+)/i);
+  // Also handle colons and other separators that might appear
+  const combinedMatch = normalized.match(/(.+?)\s+(?:and|&)\s+(.+?)(?:\s*[:;]|$)/i);
   if (combinedMatch) {
     const firstPart = combinedMatch[1].trim();
-    const secondPart = combinedMatch[2].trim();
+    let secondPart = combinedMatch[2].trim();
+    
+    // Clean up second part (remove trailing colons, etc.)
+    secondPart = secondPart.replace(/^[:;]\s*/, '').trim();
     
     console.log(`🔍 Detected combined lot names: "${firstPart}" AND "${secondPart}"`);
+    console.log(`🔍 Available lots:`, availableLots.map(l => l.name));
     
     // Extract key words from both parts (e.g., "softball", "soccer", "finkbine")
+    // Filter out common words that don't help with matching
+    const stopWords = ['lot', 'and', 'the', 'lower', 'fields', 'ave', 'ave.', 'street', 'st'];
     const keywords = [
-      ...firstPart.split(/\s+/).filter(w => w.length > 3),
-      ...secondPart.split(/\s+/).filter(w => w.length > 3)
-    ].map(w => w.toLowerCase());
+      ...firstPart.split(/\s+/),
+      ...secondPart.split(/\s+/)
+    ]
+    .map(w => w.toLowerCase().replace(/[^\w]/g, '')) // Remove punctuation
+    .filter(w => w.length > 3 && !stopWords.includes(w));
+    
+    console.log(`🔍 Extracted keywords:`, keywords);
     
     // Try to find a lot that contains BOTH key terms (for combined lots in the sheet)
     // Example: "Soccer Lot - Lower Finkbine Fields and Softball Lot" should match
-    // when detected name is "Softball Lot and Soccer Lot: Lower Finkbine Fields"
+    // when detected name is "Softball Lot AND Soccer Lot: Lower Finkbine Fields"
     match = availableLots.find((lot) => {
       const lotNameLower = lot.name.toLowerCase();
-      // Check if lot name contains both key terms (softball AND soccer)
+      
+      // Check for softball and soccer keywords (flexible matching)
       const hasSoftball = keywords.some(kw => kw.includes('softball') || lotNameLower.includes('softball'));
       const hasSoccer = keywords.some(kw => kw.includes('soccer') || lotNameLower.includes('soccer'));
       const hasFinkbine = keywords.some(kw => kw.includes('finkbine') || lotNameLower.includes('finkbine'));
       
+      console.log(`🔍 Checking lot "${lot.name}": softball=${hasSoftball}, soccer=${hasSoccer}, finkbine=${hasFinkbine}`);
+      
       // If both softball and soccer are mentioned, or if finkbine is present with either
       if ((hasSoftball && hasSoccer) || (hasFinkbine && (hasSoftball || hasSoccer))) {
+        console.log(`✅ Found match via keyword combination: "${lot.name}"`);
         return true;
       }
       
-      // Also check if lot name contains all the key words
-      const allKeywordsMatch = keywords.every(kw => 
-        lotNameLower.includes(kw) || kw.length <= 3 // Ignore short words
-      );
-      return allKeywordsMatch;
+      // Also check if lot name contains both "softball" and "soccer" (order-independent)
+      if (lotNameLower.includes('softball') && lotNameLower.includes('soccer')) {
+        console.log(`✅ Found match via direct softball+soccer check: "${lot.name}"`);
+        return true;
+      }
+      
+      // Check if lot name contains both "soccer" and "softball" with "finkbine"
+      if (lotNameLower.includes('finkbine') && (lotNameLower.includes('softball') || lotNameLower.includes('soccer'))) {
+        console.log(`✅ Found match via finkbine+softball/soccer check: "${lot.name}"`);
+        return true;
+      }
+      
+      return false;
     });
     
     if (match) {
