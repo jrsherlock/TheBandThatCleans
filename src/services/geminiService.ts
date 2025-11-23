@@ -589,6 +589,66 @@ function findMatchingLot(identifiedLotName: string, availableLots: Lot[]): Lot |
     return match;
   }
 
+  // Handle combined lot names (e.g., "Softball Lot and Soccer Lot")
+  // Check if the identified name contains "and" or "&" indicating multiple lots
+  const combinedMatch = normalized.match(/(.+?)\s+(?:and|&)\s+(.+)/i);
+  if (combinedMatch) {
+    const firstPart = combinedMatch[1].trim();
+    const secondPart = combinedMatch[2].trim();
+    
+    console.log(`🔍 Detected combined lot names: "${firstPart}" AND "${secondPart}"`);
+    
+    // Extract key words from both parts (e.g., "softball", "soccer", "finkbine")
+    const keywords = [
+      ...firstPart.split(/\s+/).filter(w => w.length > 3),
+      ...secondPart.split(/\s+/).filter(w => w.length > 3)
+    ].map(w => w.toLowerCase());
+    
+    // Try to find a lot that contains BOTH key terms (for combined lots in the sheet)
+    // Example: "Soccer Lot - Lower Finkbine Fields and Softball Lot" should match
+    // when detected name is "Softball Lot and Soccer Lot: Lower Finkbine Fields"
+    match = availableLots.find((lot) => {
+      const lotNameLower = lot.name.toLowerCase();
+      // Check if lot name contains both key terms (softball AND soccer)
+      const hasSoftball = keywords.some(kw => kw.includes('softball') || lotNameLower.includes('softball'));
+      const hasSoccer = keywords.some(kw => kw.includes('soccer') || lotNameLower.includes('soccer'));
+      const hasFinkbine = keywords.some(kw => kw.includes('finkbine') || lotNameLower.includes('finkbine'));
+      
+      // If both softball and soccer are mentioned, or if finkbine is present with either
+      if ((hasSoftball && hasSoccer) || (hasFinkbine && (hasSoftball || hasSoccer))) {
+        return true;
+      }
+      
+      // Also check if lot name contains all the key words
+      const allKeywordsMatch = keywords.every(kw => 
+        lotNameLower.includes(kw) || kw.length <= 3 // Ignore short words
+      );
+      return allKeywordsMatch;
+    });
+    
+    if (match) {
+      console.log(`✅ Combined lot match: "${identifiedLotName}" → ${match.name}`);
+      return match;
+    }
+    
+    // Fallback: Try to match each part separately
+    const firstMatch = findMatchingLotInternal(firstPart, availableLots);
+    const secondMatch = findMatchingLotInternal(secondPart, availableLots);
+    
+    // If both match, prefer the first one (or could return both, but for now use first)
+    if (firstMatch && secondMatch) {
+      console.log(`⚠️ Both lots matched: "${firstMatch.name}" and "${secondMatch.name}". Using first match.`);
+      return firstMatch;
+    } else if (firstMatch) {
+      console.log(`✅ Matched first part: "${firstPart}" → ${firstMatch.name}`);
+      return firstMatch;
+    } else if (secondMatch) {
+      console.log(`✅ Matched second part: "${secondPart}" → ${secondMatch.name}`);
+      return secondMatch;
+    }
+    // If neither matches, fall through to regular matching
+  }
+
   // Try partial match (contains) - but prefer more specific matches
   // First try if lot name contains the identified name (more specific)
   match = availableLots.find((lot) => lot.name.toLowerCase().includes(normalized));
@@ -604,6 +664,27 @@ function findMatchingLot(identifiedLotName: string, availableLots: Lot[]): Lot |
   if (match) {
     console.log(`✅ Partial match (identified contains lot): "${identifiedLotName}" → ${match.name}`);
     return match;
+  }
+  
+  // Try keyword-based matching for combined lots (bidirectional)
+  // Extract significant keywords from detected name
+  const detectedKeywords = normalized
+    .split(/\s+/)
+    .filter(w => w.length > 3 && !['lot', 'and', 'the', 'lower', 'fields'].includes(w))
+    .map(w => w.toLowerCase());
+  
+  if (detectedKeywords.length > 0) {
+    match = availableLots.find((lot) => {
+      const lotNameLower = lot.name.toLowerCase();
+      // Check if lot name contains at least 2 key words from detected name
+      const matchingKeywords = detectedKeywords.filter(kw => lotNameLower.includes(kw));
+      return matchingKeywords.length >= 2 || (matchingKeywords.length === 1 && detectedKeywords.length === 1);
+    });
+    
+    if (match) {
+      console.log(`✅ Keyword-based match: "${identifiedLotName}" → ${match.name}`);
+      return match;
+    }
   }
 
   // Try matching lot number with directional suffix (e.g., "Lot 43 NW" or "43 NW")
@@ -646,6 +727,48 @@ function findMatchingLot(identifiedLotName: string, availableLots: Lot[]): Lot |
 
   console.warn(`⚠️ No match found for: "${identifiedLotName}"`);
   console.warn(`Available lots: ${availableLots.map(l => l.name).join(', ')}`);
+  return null;
+}
+
+/**
+ * Internal matching function (recursive helper for combined lot names)
+ */
+function findMatchingLotInternal(identifiedLotName: string, availableLots: Lot[]): Lot | null {
+  if (!identifiedLotName || !availableLots || availableLots.length === 0) {
+    return null;
+  }
+
+  const normalized = identifiedLotName.toLowerCase().trim();
+
+  // Try exact match
+  let match = availableLots.find((lot) => lot.name.toLowerCase().trim() === normalized);
+  if (match) return match;
+
+  // Try if lot name contains the identified name
+  match = availableLots.find((lot) => lot.name.toLowerCase().includes(normalized));
+  if (match) return match;
+
+  // Try if identified name contains lot name
+  match = availableLots.find((lot) => normalized.includes(lot.name.toLowerCase()));
+  if (match) return match;
+
+  // Try matching by key words (e.g., "softball", "soccer", "finkbine")
+  // Filter out common words that don't help with matching
+  const stopWords = ['lot', 'and', 'the', 'lower', 'fields', 'ave', 'ave.', 'street', 'st', 'road', 'rd'];
+  const keywords = normalized
+    .split(/\s+/)
+    .filter(w => w.length > 3 && !stopWords.includes(w))
+    .map(w => w.toLowerCase());
+    
+  if (keywords.length > 0) {
+    match = availableLots.find((lot) => {
+      const lotNameLower = lot.name.toLowerCase();
+      // Match if lot name contains any of the key words
+      return keywords.some(keyword => lotNameLower.includes(keyword));
+    });
+    if (match) return match;
+  }
+
   return null;
 }
 
