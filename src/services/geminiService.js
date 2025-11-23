@@ -11,9 +11,11 @@ const API_KEY = import.meta.env.VITE_GEMINI_API_KEY;
 // List of models to try in order of preference
 // Using correct model names for v1beta API
 const MODEL_PRIORITY = [
-  'gemini-1.5-flash-latest',   // Latest 1.5 flash (Recommended for speed/cost)
-  'gemini-1.5-pro-latest',     // Latest 1.5 pro (Higher intelligence)
+ 'gemini-1.5-flash', // CHANGED: Removed '-latest' (Stable version)
+  'gemini-1.5-pro',   // CHANGED: Removed '-latest' (Stable version)
 ];
+
+
 
 const MODEL_NAME = MODEL_PRIORITY[0];
 
