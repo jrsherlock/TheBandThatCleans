@@ -9,7 +9,7 @@ import { format } from 'date-fns';
 import { motion } from 'framer-motion';
 import { toast, Toaster } from 'react-hot-toast';
 import apiService, { ApiError } from './api-service.js';
-import { analyzeBulkSignInSheets } from './src/services/geminiService.js';
+import { analyzeBulkSignInSheets } from './src/services/geminiService';
 
 // Import TBTC Logo
 import TBTCLogo from './src/public/TBTC.png';
