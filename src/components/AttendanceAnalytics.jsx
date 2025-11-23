@@ -139,26 +139,26 @@ const AttendanceAnalytics = ({ students }) => {
       totalEligible: stats.totalEligible
     })).sort((a, b) => b.avgAttendance - a.avgAttendance);
 
-    // Section comparison
+    // Instrument comparison (grouped by instrument to compare trumpets vs trombones, etc.)
     // FIXED: Only count past events, not all 7 events
-    const sectionStats = {};
+    const instrumentSectionStats = {};
     students.forEach(s => {
-      const section = s.section || 'Unknown';
-      if (!sectionStats[section]) {
-        sectionStats[section] = { total: 0, attended: 0 };
+      const instrument = s.instrument || 'Unknown';
+      if (!instrumentSectionStats[instrument]) {
+        instrumentSectionStats[instrument] = { total: 0, attended: 0 };
       }
-      sectionStats[section].total++;
+      instrumentSectionStats[instrument].total++;
 
       let studentAttended = 0;
       // Only count past events
       pastEventFields.forEach(field => {
         if (s[field] === 'X' || s[field] === 'x') studentAttended++;
       });
-      sectionStats[section].attended += studentAttended;
+      instrumentSectionStats[instrument].attended += studentAttended;
     });
 
-    const sectionComparison = Object.entries(sectionStats).map(([section, stats]) => ({
-      section,
+    const sectionComparison = Object.entries(instrumentSectionStats).map(([instrument, stats]) => ({
+      section: instrument, // Using 'section' key name for backward compatibility with display
       // Use numPastEvents instead of hardcoded 7
       avgAttendance: stats.total > 0 ? (stats.attended / (stats.total * numPastEvents) * 100).toFixed(1) : 0,
       totalStudents: stats.total
@@ -392,11 +392,11 @@ const AttendanceAnalytics = ({ students }) => {
           </div>
         </div>
 
-        {/* Section Comparison */}
+        {/* Instrument Comparison */}
         <div className="bg-white dark:bg-gray-800 p-6 rounded-lg border border-gray-200 dark:border-gray-700 lg:col-span-2">
           <h3 className="text-lg font-bold text-gray-900 dark:text-white mb-4 flex items-center gap-2">
             <Users size={20} />
-            Attendance by Section
+            Attendance by Instrument
           </h3>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
             {analytics.sectionComparison.map((section) => (
