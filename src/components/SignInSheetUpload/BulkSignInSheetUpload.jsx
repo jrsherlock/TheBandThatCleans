@@ -5,9 +5,10 @@
  */
 
 import React, { useState, useRef } from 'react';
-import { X, Upload, Loader2, CheckCircle, AlertTriangle, FileImage, Trash2 } from 'lucide-react';
+import { X, Upload, Loader2, CheckCircle, AlertTriangle, FileImage, FileText, Trash2 } from 'lucide-react';
 import { toast } from 'react-hot-toast';
-import { validateImageFile, formatBytes } from '../../utils/imageCompression';
+import { validateFile, formatBytes } from '../../utils/imageCompression';
+import { isPDFFile, validatePDFFile, extractPDFPagesToImages } from '../../utils/pdfProcessor';
 
 const BulkSignInSheetUpload = ({
   onClose,
@@ -24,40 +25,106 @@ const BulkSignInSheetUpload = ({
   const MAX_FILES = 18; // Maximum number of parking lots
 
   // Handle file selection
-  const handleFileSelect = (event) => {
+  const handleFileSelect = async (event) => {
     const files = Array.from(event.target.files || []);
     
-    // Validate total file count
-    if (selectedFiles.length + files.length > MAX_FILES) {
-      toast.error(`Maximum ${MAX_FILES} images allowed`);
-      return;
+    if (files.length === 0) return;
+
+    // Check if any files are PDFs
+    const pdfFiles = files.filter(f => isPDFFile(f));
+    const imageFiles = files.filter(f => !isPDFFile(f));
+
+    // Validate PDFs
+    const pdfErrors = [];
+    for (const pdfFile of pdfFiles) {
+      const validation = validatePDFFile(pdfFile);
+      if (!validation.valid) {
+        pdfErrors.push(`${pdfFile.name}: ${validation.error}`);
+      }
     }
 
-    // Validate each file
-    const validFiles = [];
-    const errors = [];
+    if (pdfErrors.length > 0) {
+      toast.error(`PDF validation errors:\n${pdfErrors.join('\n')}`);
+    }
 
-    for (const file of files) {
-      try {
-        validateImageFile(file);
+    // Validate images
+    const validFiles = [];
+    const imageErrors = [];
+
+    for (const file of imageFiles) {
+      const validation = validateFile(file);
+      if (validation.valid) {
         validFiles.push({
           file,
           id: `${file.name}-${Date.now()}-${Math.random()}`,
           preview: URL.createObjectURL(file),
-          status: 'pending'
+          status: 'pending',
+          isPDF: false
         });
-      } catch (error) {
-        errors.push(`${file.name}: ${error.message}`);
+      } else {
+        imageErrors.push(`${file.name}: ${validation.error}`);
       }
     }
 
-    if (errors.length > 0) {
-      toast.error(`Some files were invalid:\n${errors.join('\n')}`);
+    // Process PDFs - extract pages
+    if (pdfFiles.length > 0 && pdfErrors.length === 0) {
+      toast.loading('Extracting pages from PDF(s)...', { id: 'pdf-extract' });
+      
+      try {
+        for (const pdfFile of pdfFiles) {
+          console.log(`📄 Processing PDF: ${pdfFile.name}`);
+          const extractedPages = await extractPDFPagesToImages(pdfFile);
+          
+          // Check if adding all pages would exceed MAX_FILES
+          if (selectedFiles.length + validFiles.length + extractedPages.length > MAX_FILES) {
+            toast.error(`Adding this PDF would exceed the maximum of ${MAX_FILES} pages. Only adding first ${MAX_FILES - selectedFiles.length - validFiles.length} pages.`, { id: 'pdf-extract' });
+            extractedPages.splice(MAX_FILES - selectedFiles.length - validFiles.length);
+          }
+
+          // Add each extracted page as a separate file
+          for (let i = 0; i < extractedPages.length; i++) {
+            const pageFile = extractedPages[i];
+            validFiles.push({
+              file: pageFile,
+              id: `${pdfFile.name}-page-${i + 1}-${Date.now()}-${Math.random()}`,
+              preview: URL.createObjectURL(pageFile),
+              status: 'pending',
+              isPDF: false,
+              sourcePDF: pdfFile.name,
+              pageNumber: i + 1
+            });
+          }
+        }
+        
+        toast.success(`Extracted ${validFiles.filter(f => f.sourcePDF).length} page(s) from PDF(s)`, { id: 'pdf-extract' });
+      } catch (error) {
+        console.error('Error extracting PDF pages:', error);
+        toast.error(`Failed to extract PDF pages: ${error.message}`, { id: 'pdf-extract' });
+      }
+    }
+
+    // Check total file count after PDF extraction
+    if (selectedFiles.length + validFiles.length > MAX_FILES) {
+      toast.error(`Maximum ${MAX_FILES} images allowed. Only adding first ${MAX_FILES - selectedFiles.length} files.`);
+      validFiles.splice(MAX_FILES - selectedFiles.length);
+    }
+
+    if (imageErrors.length > 0) {
+      toast.error(`Some files were invalid:\n${imageErrors.join('\n')}`);
     }
 
     if (validFiles.length > 0) {
       setSelectedFiles(prev => [...prev, ...validFiles]);
-      toast.success(`Added ${validFiles.length} image(s)`);
+      const pdfPageCount = validFiles.filter(f => f.sourcePDF).length;
+      const imageCount = validFiles.filter(f => !f.sourcePDF).length;
+      
+      if (pdfPageCount > 0 && imageCount > 0) {
+        toast.success(`Added ${imageCount} image(s) and ${pdfPageCount} PDF page(s)`);
+      } else if (pdfPageCount > 0) {
+        toast.success(`Added ${pdfPageCount} PDF page(s)`);
+      } else {
+        toast.success(`Added ${imageCount} image(s)`);
+      }
     }
 
     // Reset input
@@ -159,7 +226,7 @@ const BulkSignInSheetUpload = ({
               Bulk Sign-In Sheet Upload
             </h2>
             <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
-              Upload up to {MAX_FILES} sign-in sheet images at once
+              Upload up to {MAX_FILES} sign-in sheet images or a PDF with multiple pages
             </p>
           </div>
           <button
@@ -179,7 +246,7 @@ const BulkSignInSheetUpload = ({
               <input
                 ref={fileInputRef}
                 type="file"
-                accept="image/*"
+                accept="image/*,application/pdf"
                 multiple
                 onChange={handleFileSelect}
                 disabled={isProcessing || selectedFiles.length >= MAX_FILES}
@@ -196,10 +263,10 @@ const BulkSignInSheetUpload = ({
               >
                 <Upload className="mx-auto text-gray-400 dark:text-gray-500 mb-3" size={48} />
                 <p className="text-gray-600 dark:text-gray-400 mb-2">
-                  Click to select images or drag and drop
+                  Click to select images/PDFs or drag and drop
                 </p>
                 <p className="text-sm text-gray-500 dark:text-gray-500">
-                  JPEG, PNG up to 10MB each • {selectedFiles.length}/{MAX_FILES} selected
+                  JPEG, PNG, or PDF (up to 18 pages) • {selectedFiles.length}/{MAX_FILES} selected
                 </p>
               </div>
             </div>
@@ -227,11 +294,17 @@ const BulkSignInSheetUpload = ({
                     key={fileItem.id}
                     className="relative group border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden"
                   >
-                    <img
-                      src={fileItem.preview}
-                      alt={fileItem.file.name}
-                      className="w-full h-32 object-cover"
-                    />
+                    {fileItem.sourcePDF ? (
+                      <div className="w-full h-32 bg-gray-100 dark:bg-gray-800 flex items-center justify-center">
+                        <FileText className="text-gray-400 dark:text-gray-500" size={48} />
+                      </div>
+                    ) : (
+                      <img
+                        src={fileItem.preview}
+                        alt={fileItem.file.name}
+                        className="w-full h-32 object-cover"
+                      />
+                    )}
                     <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
                       <button
                         onClick={() => handleRemoveFile(fileItem.id)}
@@ -243,7 +316,7 @@ const BulkSignInSheetUpload = ({
                     </div>
                     <div className="p-2 bg-gray-50 dark:bg-gray-900">
                       <p className="text-xs text-gray-600 dark:text-gray-400 truncate">
-                        {fileItem.file.name}
+                        {fileItem.sourcePDF ? `${fileItem.sourcePDF} (Page ${fileItem.pageNumber})` : fileItem.file.name}
                       </p>
                       <p className="text-xs text-gray-500 dark:text-gray-500">
                         {formatBytes(fileItem.file.size)}
@@ -401,4 +474,5 @@ const BulkSignInSheetUpload = ({
 };
 
 export default BulkSignInSheetUpload;
+
 

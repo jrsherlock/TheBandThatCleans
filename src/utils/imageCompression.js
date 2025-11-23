@@ -48,6 +48,26 @@ export function validateImageFile(file) {
 }
 
 /**
+ * Validate file (image or PDF)
+ * @param {File} file - The file to validate
+ * @returns {Object} - { valid: boolean, error: string|null }
+ */
+export function validateFile(file) {
+  if (!file) {
+    return { valid: false, error: 'No file provided' };
+  }
+
+  // Check if it's a PDF
+  if (file.type === 'application/pdf') {
+    // PDF validation is handled by pdfProcessor
+    return { valid: true, error: null };
+  }
+
+  // Otherwise validate as image
+  return validateImageFile(file);
+}
+
+/**
  * Compress image to reduce file size while maintaining quality
  * @param {File} file - The image file to compress
  * @param {Object} options - Compression options
