@@ -526,17 +526,36 @@ const App = () => {
       return acc + count;
     }, 0);
 
+    // Calculate matched and unmatched student counts
+    const matchedStudents = lots.reduce((acc, l) => {
+      const matched = l.aiMatchedCount !== undefined && l.aiMatchedCount !== null && l.aiMatchedCount !== ''
+        ? parseInt(l.aiMatchedCount) || 0
+        : 0;
+      return acc + matched;
+    }, 0);
+
+    const unmatchedStudents = lots.reduce((acc, l) => {
+      const unmatched = l.aiUnmatchedCount !== undefined && l.aiUnmatchedCount !== null && l.aiUnmatchedCount !== ''
+        ? parseInt(l.aiUnmatchedCount) || 0
+        : 0;
+      return acc + unmatched;
+    }, 0);
+
     // Total roster size (hardcoded to 246 for now)
     const totalRosterSize = 246;
 
     // DEBUG: AI-scanned lot counts (single source of truth)
     console.log('📊 AI-SCANNED LOT COUNT SYSTEM:');
     console.log('  ✅ Total Students Present (from AI-scanned lots):', totalStudentsSignedUp);
+    console.log('  ✅ Matched Students:', matchedStudents);
+    console.log('  ⚠️  Unmatched Students:', unmatchedStudents);
     console.log('  📋 This count is used across Dashboard, Header, and Students tab');
     console.log('  - Lot breakdown:', lots.map(l => ({
       id: l.id,
       name: l.name,
       aiCount: l.aiStudentCount,
+      matched: l.aiMatchedCount,
+      unmatched: l.aiUnmatchedCount,
       manualCount: l.totalStudentsSignedUp,
       usingAI: l.aiStudentCount !== undefined && l.aiStudentCount !== null && l.aiStudentCount !== ''
     })));
@@ -547,6 +566,8 @@ const App = () => {
       studentsPresent: totalStudentsSignedUp, // Show sum of lot sign-ups (AI-verified when available)
       totalStudents: totalRosterSize, // Total roster size
       totalStudentsSignedUp,
+      matchedStudents,
+      unmatchedStudents,
     };
   }, [lots, students]);
 

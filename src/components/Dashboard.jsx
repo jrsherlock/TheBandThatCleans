@@ -205,21 +205,21 @@ const AdminDashboard = ({ lots, students, stats, onBulkStatusUpdate, onSendNotif
           </div>
         </div>
         <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-4 flex items-center gap-3 transition-colors duration-200">
-          <div className="bg-green-100 dark:bg-green-900/40 p-2 rounded-lg"><CheckCircle className="text-green-600 dark:text-green-400" size={20} /></div>
+          <div className="bg-purple-100 dark:bg-purple-900/40 p-2 rounded-lg"><CheckCircle className="text-purple-600 dark:text-purple-400" size={20} /></div>
           <div>
-            <div className="text-2xl font-bold text-gray-900 dark:text-white">{stats.studentsPresent}</div>
-            <div className="text-sm text-gray-600 dark:text-gray-400">Students Checked In Today</div>
+            <div className="text-2xl font-bold text-gray-900 dark:text-white">{stats.matchedStudents || 0}</div>
+            <div className="text-sm text-gray-600 dark:text-gray-400">Students Signed In - Matched</div>
           </div>
         </div>
         <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-4 flex items-center gap-3 transition-colors duration-200">
-          <div className="bg-orange-100 dark:bg-orange-900/40 p-2 rounded-lg"><Users className="text-orange-600 dark:text-orange-400" size={20} /></div>
+          <div className="bg-yellow-100 dark:bg-yellow-900/40 p-2 rounded-lg"><AlertTriangle className="text-yellow-600 dark:text-yellow-400" size={20} /></div>
           <div>
-            <div className="text-2xl font-bold text-gray-900 dark:text-white">0</div>
-            <div className="text-sm text-gray-600 dark:text-gray-400">Students Signed Out Today</div>
+            <div className="text-2xl font-bold text-gray-900 dark:text-white">{stats.unmatchedStudents || 0}</div>
+            <div className="text-sm text-gray-600 dark:text-gray-400">Students Signed In - Unmatched</div>
           </div>
         </div>
         <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-4 flex items-center gap-3 transition-colors duration-200">
-          <div className="bg-purple-100 dark:bg-purple-900/40 p-2 rounded-lg"><Users className="text-purple-600 dark:text-purple-400" size={20} /></div>
+          <div className="bg-green-100 dark:bg-green-900/40 p-2 rounded-lg"><Users className="text-green-600 dark:text-green-400" size={20} /></div>
           <div>
             <div className="text-lg font-bold text-gray-900 dark:text-white">
               {stats.studentsPresent} / {stats.totalStudents}
@@ -250,9 +250,19 @@ const AdminDashboard = ({ lots, students, stats, onBulkStatusUpdate, onSendNotif
               const manualCount = lot.totalStudentsSignedUp || 0;
               const studentCount = hasAICount ? aiCount : manualCount;
 
+              // Get matched and unmatched counts
+              const matchedCount = lot.aiMatchedCount !== undefined && lot.aiMatchedCount !== null && lot.aiMatchedCount !== ''
+                ? parseInt(lot.aiMatchedCount) || 0
+                : 0;
+              const unmatchedCount = lot.aiUnmatchedCount !== undefined && lot.aiUnmatchedCount !== null && lot.aiUnmatchedCount !== ''
+                ? parseInt(lot.aiUnmatchedCount) || 0
+                : 0;
+
               return {
                 ...lot,
                 studentCount,
+                matchedCount,
+                unmatchedCount,
                 hasAICount,
                 isAIVerified: hasAICount
               };
@@ -263,7 +273,10 @@ const AdminDashboard = ({ lots, students, stats, onBulkStatusUpdate, onSendNotif
                 const hasAI = l.aiStudentCount !== undefined && l.aiStudentCount !== null && l.aiStudentCount !== '';
                 return hasAI ? (parseInt(l.aiStudentCount) || 0) : (l.totalStudentsSignedUp || 0);
               }));
-              const percentage = maxCount > 0 ? (lot.studentCount / maxCount) * 100 : 0;
+
+              // Calculate percentages for stacked bar
+              const matchedPercentage = maxCount > 0 ? (lot.matchedCount / maxCount) * 100 : 0;
+              const unmatchedPercentage = maxCount > 0 ? (lot.unmatchedCount / maxCount) * 100 : 0;
 
               return (
                 <div key={lot.id} className="group">
@@ -289,23 +302,30 @@ const AdminDashboard = ({ lots, students, stats, onBulkStatusUpdate, onSendNotif
                     </div>
                   </div>
                   <div className="relative h-6 bg-gray-100 dark:bg-gray-700 rounded-full overflow-hidden">
-                    <div
-                      className={`absolute inset-y-0 left-0 rounded-full transition-all duration-500 ${
-                        lot.isAIVerified
-                          ? 'bg-gradient-to-r from-purple-500 to-purple-600 dark:from-purple-600 dark:to-purple-700'
-                          : 'bg-gradient-to-r from-blue-500 to-blue-600 dark:from-blue-600 dark:to-blue-700'
-                      }`}
-                      style={{ width: `${percentage}%` }}
-                    >
-                      {lot.studentCount > 0 && (
+                    {/* Stacked bar: Purple (matched) + Yellow (unmatched) */}
+                    {lot.studentCount > 0 ? (
+                      <>
+                        {/* Purple segment - Matched students */}
+                        <div
+                          className="absolute inset-y-0 left-0 bg-gradient-to-r from-purple-500 to-purple-600 dark:from-purple-600 dark:to-purple-700 transition-all duration-500"
+                          style={{ width: `${matchedPercentage}%` }}
+                        />
+                        {/* Yellow segment - Unmatched students */}
+                        <div
+                          className="absolute inset-y-0 bg-gradient-to-r from-yellow-400 to-yellow-500 dark:from-yellow-500 dark:to-yellow-600 transition-all duration-500"
+                          style={{
+                            left: `${matchedPercentage}%`,
+                            width: `${unmatchedPercentage}%`
+                          }}
+                        />
+                        {/* Total count label */}
                         <div className="absolute inset-0 flex items-center justify-end pr-2">
-                          <span className="text-xs font-medium text-white">
+                          <span className="text-xs font-medium text-white drop-shadow-md">
                             {lot.studentCount} {lot.studentCount === 1 ? 'student' : 'students'}
                           </span>
                         </div>
-                      )}
-                    </div>
-                    {lot.studentCount === 0 && (
+                      </>
+                    ) : (
                       <div className="absolute inset-0 flex items-center justify-center">
                         <span className="text-xs text-gray-500 dark:text-gray-400">
                           No students checked in
@@ -313,9 +333,27 @@ const AdminDashboard = ({ lots, students, stats, onBulkStatusUpdate, onSendNotif
                       </div>
                     )}
                   </div>
-                  <div className="flex items-center gap-2 mt-1 text-xs text-gray-500 dark:text-gray-400">
-                    <MapPin size={10} />
-                    <span className="capitalize">{lot.zone || lot.section || 'No zone'}</span>
+                  <div className="flex items-center justify-between mt-1">
+                    <div className="flex items-center gap-2 text-xs text-gray-500 dark:text-gray-400">
+                      <MapPin size={10} />
+                      <span className="capitalize">{lot.zone || lot.section || 'No zone'}</span>
+                    </div>
+                    {lot.studentCount > 0 && (
+                      <div className="flex items-center gap-3 text-xs">
+                        {lot.matchedCount > 0 && (
+                          <div className="flex items-center gap-1">
+                            <div className="w-2 h-2 rounded-full bg-purple-500"></div>
+                            <span className="text-gray-600 dark:text-gray-400">{lot.matchedCount} matched</span>
+                          </div>
+                        )}
+                        {lot.unmatchedCount > 0 && (
+                          <div className="flex items-center gap-1">
+                            <div className="w-2 h-2 rounded-full bg-yellow-500"></div>
+                            <span className="text-gray-600 dark:text-gray-400">{lot.unmatchedCount} unmatched</span>
+                          </div>
+                        )}
+                      </div>
+                    )}
                   </div>
                 </div>
               );
@@ -551,21 +589,21 @@ const VolunteerDashboard = ({ lots, students, stats, getStatusStyles, statuses, 
           </div>
         </div>
         <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-4 flex items-center gap-3 transition-colors duration-200">
-          <div className="bg-green-100 dark:bg-green-900/40 p-2 rounded-lg"><CheckCircle className="text-green-600 dark:text-green-400" size={20} /></div>
+          <div className="bg-purple-100 dark:bg-purple-900/40 p-2 rounded-lg"><CheckCircle className="text-purple-600 dark:text-purple-400" size={20} /></div>
           <div>
-            <div className="text-2xl font-bold text-gray-900 dark:text-white">{stats.studentsPresent}</div>
-            <div className="text-sm text-gray-600 dark:text-gray-400">Students Checked In Today</div>
+            <div className="text-2xl font-bold text-gray-900 dark:text-white">{stats.matchedStudents || 0}</div>
+            <div className="text-sm text-gray-600 dark:text-gray-400">Students Signed In - Matched</div>
           </div>
         </div>
         <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-4 flex items-center gap-3 transition-colors duration-200">
-          <div className="bg-orange-100 dark:bg-orange-900/40 p-2 rounded-lg"><Users className="text-orange-600 dark:text-orange-400" size={20} /></div>
+          <div className="bg-yellow-100 dark:bg-yellow-900/40 p-2 rounded-lg"><AlertTriangle className="text-yellow-600 dark:text-yellow-400" size={20} /></div>
           <div>
-            <div className="text-2xl font-bold text-gray-900 dark:text-white">0</div>
-            <div className="text-sm text-gray-600 dark:text-gray-400">Students Signed Out Today</div>
+            <div className="text-2xl font-bold text-gray-900 dark:text-white">{stats.unmatchedStudents || 0}</div>
+            <div className="text-sm text-gray-600 dark:text-gray-400">Students Signed In - Unmatched</div>
           </div>
         </div>
         <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-4 flex items-center gap-3 transition-colors duration-200">
-          <div className="bg-purple-100 dark:bg-purple-900/40 p-2 rounded-lg"><Users className="text-purple-600 dark:text-purple-400" size={20} /></div>
+          <div className="bg-green-100 dark:bg-green-900/40 p-2 rounded-lg"><Users className="text-green-600 dark:text-green-400" size={20} /></div>
           <div>
             <div className="text-lg font-bold text-gray-900 dark:text-white">
               {stats.studentsPresent} / {stats.totalStudents}

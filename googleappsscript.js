@@ -26,7 +26,9 @@ const SHEETS = {
       "aiAnalysisTimestamp",
       "countSource",
       "countEnteredBy",
-      "manualCountOverride"
+      "manualCountOverride",
+      "aiMatchedCount",
+      "aiUnmatchedCount"
     ]
   },
   STUDENTS: {

@@ -39,7 +39,9 @@ const SHEETS = {
       "aiAnalysisTimestamp",
       "countSource",
       "countEnteredBy",
-      "manualCountOverride"
+      "manualCountOverride",
+      "aiMatchedCount",
+      "aiUnmatchedCount"
     ]
   },
   STUDENTS: {
@@ -1169,6 +1171,8 @@ function handleSignInSheetUpload(payload) {
     const countSourceIndex = headers.indexOf("countSource");
     const enteredByIndex = headers.indexOf("countEnteredBy");
     const manualOverrideIndex = headers.indexOf("manualCountOverride");
+    const aiMatchedCountIndex = headers.indexOf("aiMatchedCount");
+    const aiUnmatchedCountIndex = headers.indexOf("aiUnmatchedCount");
     const commentIndex = headers.indexOf("comment");
     const lastUpdatedIndex = headers.indexOf("lastUpdated");
     const updatedByIndex = headers.indexOf("updatedBy");
@@ -1275,9 +1279,6 @@ function handleSignInSheetUpload(payload) {
       return createJsonResponse({ error: `Lot not found: ${payload.lotId}` }, 404);
     }
 
-    // Write updated data back to sheet
-    sheet.getRange(1, 1, data.length, data[0].length).setValues(data);
-
     const finalCount = payload.manualCount || payload.aiCount || 0;
     const source = payload.countSource || (payload.aiCount !== undefined ? 'ai' : 'manual');
 
@@ -1293,11 +1294,28 @@ function handleSignInSheetUpload(payload) {
         matchResults = processStudentNames(payload.studentNames, payload.lotId, currentTime, photoUrl);
         logInfo("handleSignInSheetUpload",
           `Processed ${matchResults.matchedCount} matched, ${matchResults.unmatchedCount} unmatched for lot ${payload.lotId}`);
+
+        // Update the lot row with matched/unmatched counts
+        for (let i = 1; i < data.length; i++) {
+          const sheetLotId = String(data[i][idIndex]);
+          if (sheetLotId === lotIdToUpdate) {
+            if (aiMatchedCountIndex !== -1) {
+              data[i][aiMatchedCountIndex] = matchResults.matchedCount;
+            }
+            if (aiUnmatchedCountIndex !== -1) {
+              data[i][aiUnmatchedCountIndex] = matchResults.unmatchedCount;
+            }
+            break;
+          }
+        }
       } catch (nameError) {
         logError("handleSignInSheetUpload", `Failed to process student names: ${nameError.message}`);
         // Don't fail the entire operation if name processing fails
       }
     }
+
+    // Write updated data back to sheet (after processing student names)
+    sheet.getRange(1, 1, data.length, data[0].length).setValues(data);
 
     // Build response with Drive upload info if available
     const response = {
@@ -1401,6 +1419,8 @@ function handleBulkSignInSheetUpload(payload) {
     const countSourceIndex = headers.indexOf("countSource");
     const countEnteredByIndex = headers.indexOf("countEnteredBy");
     const manualOverrideIndex = headers.indexOf("manualCountOverride");
+    const aiMatchedCountIndex = headers.indexOf("aiMatchedCount");
+    const aiUnmatchedCountIndex = headers.indexOf("aiUnmatchedCount");
     const lastUpdatedIndex = headers.indexOf("lastUpdated");
     const updatedByIndex = headers.indexOf("updatedBy");
     const actualStartTimeIndex = headers.indexOf("actualStartTime");
@@ -1491,6 +1511,14 @@ function handleBulkSignInSheetUpload(payload) {
             matchResults = processStudentNames(upload.studentNames, upload.lotId, currentTime, photoUrl);
             logInfo("handleBulkSignInSheetUpload",
               `Processed ${matchResults.matchedCount} matched, ${matchResults.unmatchedCount} unmatched for lot ${upload.lotId}`);
+
+            // Store matched/unmatched counts in the lot row
+            if (aiMatchedCountIndex !== -1) {
+              lotsData[lotRowIndex][aiMatchedCountIndex] = matchResults.matchedCount;
+            }
+            if (aiUnmatchedCountIndex !== -1) {
+              lotsData[lotRowIndex][aiUnmatchedCountIndex] = matchResults.unmatchedCount;
+            }
           } catch (nameError) {
             logError("handleBulkSignInSheetUpload", `Failed to process student names for ${upload.lotId}: ${nameError.message}`);
           }
