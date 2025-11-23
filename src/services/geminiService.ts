@@ -732,11 +732,16 @@ export async function analyzeBulkSignInSheets(
         analysis: analysis,
       });
 
-      // Log match details for debugging
+      // Log match details for debugging (important for mobile debugging)
+      console.log(`📋 LOT MATCHING DETAILS:`);
+      console.log(`   File: ${imageFile.name}`);
+      console.log(`   Detected from image: "${analysis.lotIdentified}"`);
+      console.log(`   Matched to lot: "${matchedLot.name}" (ID: ${matchedLot.id})`);
+      console.log(`   Students found: ${analysis.count}`);
+      console.log(`   Match type: ${analysis.lotIdentified === matchedLot.name ? 'EXACT' : 'FUZZY'}`);
+      
       if (analysis.lotIdentified !== matchedLot.name) {
-        console.log(`✅ Success (matched): "${analysis.lotIdentified}" → ${matchedLot.name} (${analysis.count} students)`);
-      } else {
-        console.log(`✅ Success: ${imageFile.name} → ${matchedLot.name} (${analysis.count} students)`);
+        console.warn(`   ⚠️ WARNING: Detected name differs from matched name - verify this is correct!`);
       }
     } catch (error: any) {
       console.error(`❌ Failed: ${imageFile.name}`, error);

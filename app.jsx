@@ -820,10 +820,24 @@ const App = () => {
       );
 
       // Step 3: Upload all to backend
+      // Log upload details for debugging (especially useful on mobile)
+      console.log(`📤 UPLOADING TO BACKEND:`);
+      uploadsWithImages.forEach((upload, idx) => {
+        console.log(`   Upload ${idx + 1}: Lot "${upload.lotName}" (ID: ${upload.lotId}) - ${upload.studentCount} students`);
+      });
+      
       const uploadResults = await apiService.uploadBulkSignInSheets(
         uploadsWithImages,
         currentUser.name
       );
+      
+      // Log backend response for debugging
+      console.log(`📥 BACKEND RESPONSE:`);
+      console.log(`   Successful: ${uploadResults.successful?.length || 0}`);
+      console.log(`   Failed: ${uploadResults.failed?.length || 0}`);
+      uploadResults.successful?.forEach((result, idx) => {
+        console.log(`   ✅ ${idx + 1}. ${result.lotName}: ${result.totalStudentsFound || result.studentCount || 0} students (${result.matchedCount || 0} matched, ${result.unmatchedCount || 0} unmatched)`);
+      });
 
       // Step 4: Trigger data refresh
       setTimeout(() => {
