@@ -309,6 +309,7 @@ const LotListView = ({ lots, students, currentUser, onStatusChange, onEditClick,
 
   const canEdit = hasPermission(currentUser, 'canEditLotStatus');
   const canEditDetails = hasPermission(currentUser, 'canEditLotDetails');
+  const canUploadSignInSheets = hasPermission(currentUser, 'canUploadSignInSheets');
 
   // Sort lots
   const sortedLots = useMemo(() => {
@@ -390,7 +391,7 @@ const LotListView = ({ lots, students, currentUser, onStatusChange, onEditClick,
               <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 dark:text-gray-300 uppercase tracking-wider">
                 <SortButton field="updated">Last Updated</SortButton>
               </th>
-              {canEdit && (
+              {(canEdit || canUploadSignInSheets) && (
                 <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 dark:text-gray-300 uppercase tracking-wider">
                   Actions
                 </th>
@@ -462,33 +463,43 @@ const LotListView = ({ lots, students, currentUser, onStatusChange, onEditClick,
                   <td className="px-4 py-3 text-sm text-gray-600 dark:text-gray-400">
                     {lot.lastUpdated ? format(lot.lastUpdated, 'HH:mm') : 'N/A'}
                   </td>
-                  {canEdit && (
+                  {(canEdit || canUploadSignInSheets) && (
                     <td className="px-4 py-3">
-                      {/* Status Dropdown */}
-                      {onStatusChange && (
-                        <select
-                          value={lot.status}
-                          onChange={(e) => onStatusChange(lot.id, e.target.value)}
-                          aria-label={`Change status for ${lot.name}`}
-                          className={`
-                            text-xs px-2 py-1 rounded border-2 font-medium
-                            transition-all duration-200
-                            bg-white dark:bg-gray-800
-                            ${getStatusCardColors(lot.status).buttonBorder}
-                            ${getStatusCardColors(lot.status).buttonText}
-                            hover:shadow-md
-                            focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 dark:focus:ring-blue-400
-                            cursor-pointer
-                          `}
-                        >
-                          <option value={lot.status}>{getStatusLabel(lot.status)}</option>
-                          {statuses.filter(s => s !== lot.status).map(status => (
-                            <option key={status} value={status}>
-                              {getStatusLabel(status)}
-                            </option>
-                          ))}
-                        </select>
-                      )}
+                      <div className="flex flex-col gap-2">
+                        {/* Status Dropdown */}
+                        {canEdit && onStatusChange && (
+                          <select
+                            value={lot.status}
+                            onChange={(e) => onStatusChange(lot.id, e.target.value)}
+                            aria-label={`Change status for ${lot.name}`}
+                            className={`
+                              text-xs px-2 py-1 rounded border-2 font-medium
+                              transition-all duration-200
+                              bg-white dark:bg-gray-800
+                              ${getStatusCardColors(lot.status).buttonBorder}
+                              ${getStatusCardColors(lot.status).buttonText}
+                              hover:shadow-md
+                              focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 dark:focus:ring-blue-400
+                              cursor-pointer
+                            `}
+                          >
+                            <option value={lot.status}>{getStatusLabel(lot.status)}</option>
+                            {statuses.filter(s => s !== lot.status).map(status => (
+                              <option key={status} value={status}>
+                                {getStatusLabel(status)}
+                              </option>
+                            ))}
+                          </select>
+                        )}
+                        {/* View Sign-In Sheet Button */}
+                        {lot.signUpSheetPhoto && lot.signUpSheetPhoto.trim() !== '' && (
+                          <DriveLinkButton
+                            url={lot.signUpSheetPhoto}
+                            lotName={lot.name}
+                            compact={true}
+                          />
+                        )}
+                      </div>
                     </td>
                   )}
                 </motion.tr>
@@ -551,10 +562,10 @@ const LotListView = ({ lots, students, currentUser, onStatusChange, onEditClick,
               </div>
 
               {/* Mobile Actions */}
-              {canEdit && (
-                <div className="mt-3">
+              {(canEdit || canUploadSignInSheets) && (
+                <div className="mt-3 space-y-2">
                   {/* Status Dropdown */}
-                  {onStatusChange && (
+                  {canEdit && onStatusChange && (
                     <select
                       value={lot.status}
                       onChange={(e) => onStatusChange(lot.id, e.target.value)}
@@ -577,6 +588,15 @@ const LotListView = ({ lots, students, currentUser, onStatusChange, onEditClick,
                         </option>
                       ))}
                     </select>
+                  )}
+                  {/* View Sign-In Sheet Button */}
+                  {lot.signUpSheetPhoto && lot.signUpSheetPhoto.trim() !== '' && (
+                    <DriveLinkButton
+                      url={lot.signUpSheetPhoto}
+                      lotName={lot.name}
+                      compact={true}
+                      className="w-full"
+                    />
                   )}
                 </div>
               )}
