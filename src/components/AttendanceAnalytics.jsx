@@ -806,6 +806,31 @@ const AttendanceAnalytics = ({ students }) => {
 const InstrumentDetailModal = ({ instrument, students, eventDates, eventAttendance, instrumentComparison, onClose }) => {
   const eventFields = ['event1', 'event2', 'event3', 'event4', 'event5', 'event6', 'event7'];
   
+  // Get text color for chart axes based on dark mode
+  const [axisTextColor, setAxisTextColor] = useState('#374151'); // default to light mode gray-700
+  
+  useEffect(() => {
+    const updateAxisColor = () => {
+      if (typeof window !== 'undefined') {
+        const isDark = document.documentElement.classList.contains('dark');
+        setAxisTextColor(isDark ? '#e5e7eb' : '#374151'); // gray-300 for dark, gray-700 for light
+      }
+    };
+    
+    updateAxisColor();
+    
+    // Watch for dark mode changes
+    const observer = new MutationObserver(updateAxisColor);
+    if (typeof window !== 'undefined') {
+      observer.observe(document.documentElement, {
+        attributes: true,
+        attributeFilter: ['class']
+      });
+    }
+    
+    return () => observer.disconnect();
+  }, []);
+  
   // Filter students by instrument
   const instrumentStudents = students.filter(s => (s.instrument || 'Unknown') === instrument);
   const totalStudents = instrumentStudents.length;
