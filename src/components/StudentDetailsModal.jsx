@@ -158,7 +158,7 @@ const StudentDetailsModal = ({ student, lots, onClose }) => {
         transition={{ type: "spring", stiffness: 300, damping: 30 }}
         onClick={(e) => e.stopPropagation()}
         className={`
-          relative w-full max-w-md
+          relative w-full max-w-2xl
           bg-gradient-to-br ${theme.gradient}
           rounded-2xl p-1
           ${theme.glow} shadow-2xl
@@ -223,51 +223,58 @@ const StudentDetailsModal = ({ student, lots, onClose }) => {
           {/* Card Body */}
           <div className="p-6 space-y-6">
             {/* Stats Section - Pokemon Style */}
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-3 gap-4">
               {/* Attendance Rate */}
               <div className={`
                 bg-gradient-to-br from-gray-50 to-gray-100 dark:from-gray-800 dark:to-gray-700
-                rounded-xl p-4 border-2 border-gray-200 dark:border-gray-600
+                rounded-xl p-5 border-2 border-gray-200 dark:border-gray-600
                 text-center shadow-inner
               `}>
-                <div className="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-1">
+                <div className="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-2">
                   Attendance
                 </div>
-                <div className={`text-4xl font-black ${theme.accent} mb-1`}>
+                <div className={`text-5xl font-black ${theme.accent} mb-2`}>
                   {metrics.percentage}%
                 </div>
-                <div className="text-xs text-gray-600 dark:text-gray-400">
+                <div className="text-sm text-gray-600 dark:text-gray-400">
                   {metrics.attended}/{metrics.eligible}
                 </div>
               </div>
               
-              {/* Check-In Status */}
+              {/* Instrument */}
               <div className={`
                 bg-gradient-to-br from-gray-50 to-gray-100 dark:from-gray-800 dark:to-gray-700
-                rounded-xl p-4 border-2 border-gray-200 dark:border-gray-600
+                rounded-xl p-5 border-2 border-gray-200 dark:border-gray-600
                 text-center shadow-inner
               `}>
-                <div className="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-1">
-                  Status
+                <div className="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-2">
+                  Instrument
                 </div>
-                <div className="flex items-center justify-center gap-2 mb-1">
-                  {student.checkedIn ? (
-                    <>
-                      <CheckCircle size={24} className="text-green-600 dark:text-green-400" />
-                      <span className="text-lg font-bold text-green-600 dark:text-green-400">In</span>
-                    </>
-                  ) : (
-                    <>
-                      <Clock size={24} className="text-gray-400" />
-                      <span className="text-lg font-bold text-gray-400">Out</span>
-                    </>
-                  )}
+                <div className="text-2xl font-black text-gray-900 dark:text-white mb-1">
+                  {student.instrument || 'N/A'}
                 </div>
-                {assignedLot && (
-                  <div className="text-xs text-gray-600 dark:text-gray-400 truncate">
-                    {assignedLot.name}
+                {student.section && (
+                  <div className="text-sm text-gray-600 dark:text-gray-400">
+                    {student.section}
                   </div>
                 )}
+              </div>
+              
+              {/* Grade */}
+              <div className={`
+                bg-gradient-to-br from-gray-50 to-gray-100 dark:from-gray-800 dark:to-gray-700
+                rounded-xl p-5 border-2 border-gray-200 dark:border-gray-600
+                text-center shadow-inner
+              `}>
+                <div className="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-2">
+                  Grade
+                </div>
+                <div className="text-5xl font-black text-gray-900 dark:text-white mb-1">
+                  {student.year || student.grade || 'N/A'}
+                </div>
+                <div className="text-sm text-gray-600 dark:text-gray-400">
+                  {student.year || student.grade ? 'Student' : ''}
+                </div>
               </div>
             </div>
             
@@ -280,7 +287,7 @@ const StudentDetailsModal = ({ student, lots, onClose }) => {
                 </h3>
               </div>
               
-              <div className="grid grid-cols-7 gap-2">
+              <div className="grid grid-cols-7 gap-3">
                 {metrics.eventStatus.map((event, index) => {
                   const isAttended = event.status === 'attended';
                   const isExcused = event.status === 'excused';
@@ -292,10 +299,10 @@ const StudentDetailsModal = ({ student, lots, onClose }) => {
                       animate={{ scale: 1, opacity: 1 }}
                       transition={{ delay: index * 0.05 }}
                       className={`
-                        aspect-square rounded-lg
+                        aspect-square rounded-xl
                         flex flex-col items-center justify-center
-                        border-2 font-bold text-xs
-                        shadow-lg transform transition-all duration-200
+                        border-3 font-bold text-sm
+                        shadow-xl transform transition-all duration-200
                         hover:scale-110 hover:z-10
                         ${isAttended
                           ? 'bg-gradient-to-br from-green-500 to-emerald-600 border-green-400 text-white'
@@ -307,16 +314,16 @@ const StudentDetailsModal = ({ student, lots, onClose }) => {
                       title={`${event.label} - ${event.status === 'attended' ? 'Attended' : event.status === 'excused' ? 'Excused' : 'Absent'}`}
                     >
                       {isAttended ? (
-                        <CheckCircle size={20} className="mb-1" />
+                        <CheckCircle size={28} className="mb-2" />
                       ) : isExcused ? (
-                        <Award size={20} className="mb-1" />
+                        <Award size={28} className="mb-2" />
                       ) : (
-                        <X size={20} className="mb-1 opacity-75" />
+                        <X size={28} className="mb-2 opacity-75" />
                       )}
-                      <span className="text-[10px] leading-tight text-center px-1">
+                      <span className="text-xs leading-tight text-center px-1 font-bold">
                         {event.label.split(' ')[0]}
                       </span>
-                      <span className="text-[9px] leading-tight">
+                      <span className="text-[10px] leading-tight">
                         {event.label.split(' ')[1]}
                       </span>
                     </motion.div>
@@ -341,42 +348,27 @@ const StudentDetailsModal = ({ student, lots, onClose }) => {
               </div>
             </div>
             
-            {/* Additional Info Section */}
-            {assignedLot && (
-              <div className={`
-                bg-gradient-to-br from-blue-50 to-indigo-50 dark:from-blue-900/20 dark:to-indigo-900/20
-                rounded-xl p-4 border-2 border-blue-200 dark:border-blue-800
-              `}>
-                <div className="flex items-center gap-2 mb-2">
-                  <MapPin size={18} className="text-blue-600 dark:text-blue-400" />
-                  <span className="text-sm font-bold text-gray-700 dark:text-gray-300">Assigned Lot</span>
-                </div>
-                <div className="text-base font-semibold text-gray-900 dark:text-white">
-                  {assignedLot.name}
-                </div>
-              </div>
-            )}
             
             {/* Footer Stats */}
-            <div className="flex justify-between items-center pt-4 border-t-2 border-gray-200 dark:border-gray-700">
+            <div className="flex justify-between items-center pt-6 border-t-2 border-gray-200 dark:border-gray-700">
               <div className="text-center">
-                <div className="text-2xl font-black text-gray-900 dark:text-white">
+                <div className="text-3xl font-black text-gray-900 dark:text-white">
                   {metrics.attended}
                 </div>
-                <div className="text-xs text-gray-500 dark:text-gray-400">Events</div>
+                <div className="text-sm font-semibold text-gray-500 dark:text-gray-400">Events Attended</div>
               </div>
               <div className="text-center">
-                <div className="text-2xl font-black text-gray-900 dark:text-white">
+                <div className="text-3xl font-black text-gray-900 dark:text-white">
                   {metrics.eligible}
                 </div>
-                <div className="text-xs text-gray-500 dark:text-gray-400">Eligible</div>
+                <div className="text-sm font-semibold text-gray-500 dark:text-gray-400">Eligible Events</div>
               </div>
               {metrics.excused > 0 && (
                 <div className="text-center">
-                  <div className="text-2xl font-black text-yellow-600 dark:text-yellow-400">
+                  <div className="text-3xl font-black text-yellow-600 dark:text-yellow-400">
                     {metrics.excused}
                   </div>
-                  <div className="text-xs text-gray-500 dark:text-gray-400">Excused</div>
+                  <div className="text-sm font-semibold text-gray-500 dark:text-gray-400">Season Exempt</div>
                 </div>
               )}
             </div>
