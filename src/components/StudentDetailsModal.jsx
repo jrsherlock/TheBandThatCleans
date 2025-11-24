@@ -183,10 +183,10 @@ const StudentDetailsModal = ({ student, lots, onClose }) => {
             {/* Close Button */}
             <button 
               onClick={onClose}
-              className="absolute top-4 right-4 p-2 bg-white/20 hover:bg-white/30 rounded-full transition-colors backdrop-blur-sm"
+              className="absolute top-4 right-4 w-10 h-10 flex items-center justify-center bg-white/20 hover:bg-white/30 rounded-full transition-colors backdrop-blur-sm cursor-pointer"
               aria-label="Close modal"
             >
-              <X size={20} className="text-white" />
+              <X size={20} className="text-white pointer-events-none" />
             </button>
             
             {/* Student Name - Large and Bold */}
