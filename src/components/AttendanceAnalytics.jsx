@@ -18,6 +18,31 @@ const AttendanceAnalytics = ({ students }) => {
     11: true,
     12: true
   });
+  
+  // Get text color for chart axes based on dark mode
+  const [axisTextColor, setAxisTextColor] = useState('#374151'); // default to light mode gray-700
+  
+  useEffect(() => {
+    const updateAxisColor = () => {
+      if (typeof window !== 'undefined') {
+        const isDark = document.documentElement.classList.contains('dark');
+        setAxisTextColor(isDark ? '#e5e7eb' : '#374151'); // gray-300 for dark, gray-700 for light
+      }
+    };
+    
+    updateAxisColor();
+    
+    // Watch for dark mode changes
+    const observer = new MutationObserver(updateAxisColor);
+    if (typeof window !== 'undefined') {
+      observer.observe(document.documentElement, {
+        attributes: true,
+        attributeFilter: ['class']
+      });
+    }
+    
+    return () => observer.disconnect();
+  }, []);
 
   // Debug: Log students data
   useEffect(() => {
@@ -524,25 +549,33 @@ const AttendanceAnalytics = ({ students }) => {
               <XAxis 
                 dataKey="eventDate" 
                 className="text-xs"
-                tick={{ fill: 'currentColor' }}
+                tick={{ fill: axisTextColor, fontSize: 12 }}
+                label={{ value: 'Event Date', position: 'insideBottom', offset: -5, fill: axisTextColor, fontSize: 12 }}
               />
               <YAxis 
                 yAxisId="left"
-                label={{ value: 'Students', angle: -90, position: 'insideLeft' }}
-                tick={{ fill: 'currentColor' }}
+                label={{ value: 'Students', angle: -90, position: 'insideLeft', fill: axisTextColor, fontSize: 12 }}
+                tick={{ fill: axisTextColor, fontSize: 12 }}
               />
               <YAxis 
                 yAxisId="right"
                 orientation="right"
-                label={{ value: 'Percentage', angle: 90, position: 'insideRight' }}
-                tick={{ fill: 'currentColor' }}
+                label={{ value: 'Percentage', angle: 90, position: 'insideRight', fill: axisTextColor, fontSize: 12 }}
+                tick={{ fill: axisTextColor, fontSize: 12 }}
                 domain={[0, 100]}
               />
               <Tooltip 
                 contentStyle={{ 
-                  backgroundColor: 'var(--bg-color, white)',
-                  border: '1px solid var(--border-color, #e5e7eb)',
-                  borderRadius: '0.5rem'
+                  backgroundColor: typeof window !== 'undefined' && document.documentElement.classList.contains('dark') 
+                    ? '#1f2937' 
+                    : 'white',
+                  border: `1px solid ${typeof window !== 'undefined' && document.documentElement.classList.contains('dark') 
+                    ? '#374151' 
+                    : '#e5e7eb'}`,
+                  borderRadius: '0.5rem',
+                  color: typeof window !== 'undefined' && document.documentElement.classList.contains('dark')
+                    ? '#e5e7eb'
+                    : '#374151'
                 }}
                 formatter={(value, name, props) => {
                   if (name.includes('Grade') && name.includes('Count')) {
@@ -894,12 +927,13 @@ const InstrumentDetailModal = ({ instrument, students, eventDates, eventAttendan
                 <XAxis 
                   dataKey="date" 
                   className="text-xs"
-                  tick={{ fill: 'currentColor' }}
+                  tick={{ fill: axisTextColor, fontSize: 12 }}
+                  label={{ value: 'Event Date', position: 'insideBottom', offset: -5, fill: axisTextColor, fontSize: 12 }}
                 />
                 <YAxis 
                   domain={[0, maxY]}
-                  tick={{ fill: 'currentColor' }}
-                  label={{ value: 'Students', angle: -90, position: 'insideLeft' }}
+                  tick={{ fill: axisTextColor, fontSize: 12 }}
+                  label={{ value: 'Students', angle: -90, position: 'insideLeft', fill: axisTextColor, fontSize: 12 }}
                 />
                 {/* Threshold reference lines */}
                 <ReferenceLine 
@@ -918,9 +952,16 @@ const InstrumentDetailModal = ({ instrument, students, eventDates, eventAttendan
                 />
                 <Tooltip 
                   contentStyle={{ 
-                    backgroundColor: 'var(--bg-color, white)',
-                    border: '1px solid var(--border-color, #e5e7eb)',
-                    borderRadius: '0.5rem'
+                    backgroundColor: typeof window !== 'undefined' && document.documentElement.classList.contains('dark') 
+                      ? '#1f2937' 
+                      : 'white',
+                    border: `1px solid ${typeof window !== 'undefined' && document.documentElement.classList.contains('dark') 
+                      ? '#374151' 
+                      : '#e5e7eb'}`,
+                    borderRadius: '0.5rem',
+                    color: typeof window !== 'undefined' && document.documentElement.classList.contains('dark')
+                      ? '#e5e7eb'
+                      : '#374151'
                   }}
                   formatter={(value, name) => {
                     if (name === 'attended') {
