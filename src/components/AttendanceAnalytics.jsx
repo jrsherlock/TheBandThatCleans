@@ -567,51 +567,60 @@ const AttendanceAnalytics = ({ students }) => {
               />
               <Legend 
                 content={({ payload }) => {
-                  // Group payload by grade (combine Count and % entries)
-                  const gradeEntries = {};
-                  payload?.forEach(entry => {
-                    const gradeMatch = entry.dataKey?.match(/grade(\d+)/);
-                    if (gradeMatch) {
-                      const grade = parseInt(gradeMatch[1]);
-                      if (!gradeEntries[grade]) {
-                        gradeEntries[grade] = entry; // Use the first entry (Count) as the representative
-                      }
-                    }
+                  // Create entries for all grades, even if they're hidden (so they can be shown again)
+                  const allGradeEntries = analytics.gradeAttendanceData.map((gradeData, index) => {
+                    const colors = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444'];
+                    const color = colors[index % colors.length];
+                    // Find matching payload entry if visible
+                    const payloadEntry = payload?.find(entry => {
+                      const gradeMatch = entry.dataKey?.match(/grade(\d+)/);
+                      return gradeMatch && parseInt(gradeMatch[1]) === gradeData.grade;
+                    });
+                    
+                    return {
+                      grade: gradeData.grade,
+                      color: color,
+                      payloadEntry: payloadEntry
+                    };
                   });
                   
                   return (
                     <div className="flex flex-wrap justify-center gap-4 mt-4">
-                      {Object.entries(gradeEntries).map(([grade, entry]) => {
-                        const gradeNum = parseInt(grade);
-                        const isVisible = visibleGrades[gradeNum];
+                      {allGradeEntries.map(({ grade, color, payloadEntry }) => {
+                        const isVisible = visibleGrades[grade];
                         return (
                           <div
                             key={grade}
                             onClick={() => {
                               setVisibleGrades(prev => ({
                                 ...prev,
-                                [gradeNum]: !prev[gradeNum]
+                                [grade]: !prev[grade]
                               }));
                             }}
                             className={`
                               flex items-center gap-2 px-3 py-1.5 rounded-md cursor-pointer
-                              transition-all duration-200
+                              transition-all duration-200 select-none
                               ${isVisible 
-                                ? 'bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600' 
-                                : 'bg-gray-50 dark:bg-gray-800 opacity-50 hover:opacity-70'
+                                ? 'bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 border-2 border-transparent hover:border-gray-300 dark:hover:border-gray-600' 
+                                : 'bg-gray-50 dark:bg-gray-800 opacity-50 hover:opacity-100 hover:bg-gray-100 dark:hover:bg-gray-700 border-2 border-dashed border-gray-300 dark:border-gray-600'
                               }
                             `}
-                            style={{ borderLeft: `4px solid ${entry.color}` }}
+                            style={{ borderLeft: `4px solid ${color}` }}
+                            title={isVisible ? `Click to hide Grade ${grade}` : `Click to show Grade ${grade}`}
                           >
                             <div
-                              className="w-3 h-3 rounded"
-                              style={{ backgroundColor: entry.color }}
+                              className={`w-3 h-3 rounded transition-all ${isVisible ? '' : 'opacity-50'}`}
+                              style={{ backgroundColor: color }}
                             />
-                            <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                            <span className={`text-sm font-medium transition-all ${
+                              isVisible 
+                                ? 'text-gray-700 dark:text-gray-300' 
+                                : 'text-gray-500 dark:text-gray-500 line-through'
+                            }`}>
                               Grade {grade}
                             </span>
                             {!isVisible && (
-                              <span className="text-xs text-gray-500">(hidden)</span>
+                              <span className="text-xs text-gray-400 dark:text-gray-500">(click to show)</span>
                             )}
                           </div>
                         );
