@@ -1,11 +1,11 @@
 /**
  * TBTC Student Details Modal Component
- * Comprehensive view of student information, today's assignment, and attendance history
+ * Pokemon card-inspired design with event attendance blocks
  */
 
 import React, { useMemo, useEffect, useRef } from 'react';
-import { X, CheckCircle, Clock, Calendar, TrendingUp, Award, MapPin } from 'lucide-react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { X, CheckCircle, Clock, Calendar, TrendingUp, Award, MapPin, Users } from 'lucide-react';
+import { motion } from 'framer-motion';
 import { format } from 'date-fns';
 
 const MotionDiv = motion.div;
@@ -41,17 +41,18 @@ const calculateAttendanceMetrics = (student) => {
   
   let attended = 0;
   let excused = 0;
-  const attendedEvents = [];
-  const excusedEvents = [];
+  const eventStatus = [];
   
   eventFields.forEach((field, index) => {
     const value = student[field];
     if (value === 'X' || value === 'x') {
       attended++;
-      attendedEvents.push(EVENT_DATES[index]);
+      eventStatus.push({ ...EVENT_DATES[index], status: 'attended' });
     } else if (value === 'EX' || value === 'ex' || value === 'Ex') {
       excused++;
-      excusedEvents.push(EVENT_DATES[index]);
+      eventStatus.push({ ...EVENT_DATES[index], status: 'excused' });
+    } else {
+      eventStatus.push({ ...EVENT_DATES[index], status: 'absent' });
     }
   });
   
@@ -65,13 +66,12 @@ const calculateAttendanceMetrics = (student) => {
     total,
     eligible,
     percentage,
-    attendedEvents: attendedEvents.sort((a, b) => b.date - a.date), // Most recent first
-    excusedEvents: excusedEvents.sort((a, b) => b.date - a.date)
+    eventStatus
   };
 };
 
 /**
- * StudentDetailsModal Component
+ * StudentDetailsModal Component - Pokemon Card Design
  */
 const StudentDetailsModal = ({ student, lots, onClose }) => {
   const modalRef = useRef(null);
@@ -114,16 +114,37 @@ const StudentDetailsModal = ({ student, lots, onClose }) => {
   
   if (!student || !metrics) return null;
   
-  // Get progress bar color based on attendance percentage
-  const getProgressColor = (percentage) => {
-    if (percentage >= 80) return 'bg-green-500';
-    if (percentage >= 60) return 'bg-yellow-500';
-    return 'bg-red-500';
+  // Get card color theme based on attendance percentage
+  const getCardTheme = (percentage) => {
+    if (percentage >= 80) {
+      return {
+        gradient: 'from-emerald-500 via-green-500 to-teal-500',
+        border: 'border-emerald-400',
+        glow: 'shadow-emerald-500/50',
+        accent: 'text-emerald-600 dark:text-emerald-400'
+      };
+    } else if (percentage >= 60) {
+      return {
+        gradient: 'from-yellow-500 via-amber-500 to-orange-500',
+        border: 'border-yellow-400',
+        glow: 'shadow-yellow-500/50',
+        accent: 'text-yellow-600 dark:text-yellow-400'
+      };
+    } else {
+      return {
+        gradient: 'from-red-500 via-rose-500 to-pink-500',
+        border: 'border-red-400',
+        glow: 'shadow-red-500/50',
+        accent: 'text-red-600 dark:text-red-400'
+      };
+    }
   };
+  
+  const theme = getCardTheme(parseFloat(metrics.percentage));
   
   return (
     <div 
-      className="fixed inset-0 bg-black bg-opacity-50 dark:bg-opacity-70 flex items-center justify-center p-4 z-50"
+      className="fixed inset-0 bg-black bg-opacity-60 dark:bg-opacity-80 flex items-center justify-center p-4 z-50"
       onClick={onClose}
       role="dialog"
       aria-modal="true"
@@ -131,215 +152,234 @@ const StudentDetailsModal = ({ student, lots, onClose }) => {
     >
       <MotionDiv
         ref={modalRef}
-        initial={{ scale: 0.9, opacity: 0 }}
-        animate={{ scale: 1, opacity: 1 }}
-        exit={{ scale: 0.9, opacity: 0 }}
+        initial={{ scale: 0.85, opacity: 0, rotateY: -15 }}
+        animate={{ scale: 1, opacity: 1, rotateY: 0 }}
+        exit={{ scale: 0.85, opacity: 0, rotateY: 15 }}
+        transition={{ type: "spring", stiffness: 300, damping: 30 }}
         onClick={(e) => e.stopPropagation()}
-        className="bg-white dark:bg-gray-800 rounded-lg w-full max-w-2xl max-h-[90vh] overflow-y-auto transition-colors duration-200"
+        className={`
+          relative w-full max-w-md
+          bg-gradient-to-br ${theme.gradient}
+          rounded-2xl p-1
+          ${theme.glow} shadow-2xl
+          transform-gpu
+        `}
+        style={{ perspective: '1000px' }}
       >
-        {/* Header */}
-        <div className="sticky top-0 bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 p-6 z-10">
-          <div className="flex justify-between items-start">
-            <div>
+        {/* Pokemon Card Inner */}
+        <div className="bg-white dark:bg-gray-900 rounded-xl overflow-hidden h-full">
+          {/* Card Header - Pokemon Style */}
+          <div className={`
+            relative bg-gradient-to-r ${theme.gradient} p-6
+            border-b-4 ${theme.border}
+          `}>
+            {/* Decorative Pattern */}
+            <div className="absolute inset-0 opacity-20">
+              <div className="absolute top-2 left-2 w-8 h-8 border-2 border-white rounded-full"></div>
+              <div className="absolute top-2 right-2 w-6 h-6 border-2 border-white rotate-45"></div>
+              <div className="absolute bottom-2 left-4 w-4 h-4 border-2 border-white rounded-full"></div>
+            </div>
+            
+            {/* Close Button */}
+            <button 
+              onClick={onClose}
+              className="absolute top-4 right-4 p-2 bg-white/20 hover:bg-white/30 rounded-full transition-colors backdrop-blur-sm"
+              aria-label="Close modal"
+            >
+              <X size={20} className="text-white" />
+            </button>
+            
+            {/* Student Name - Large and Bold */}
+            <div className="relative z-10">
               <h2 
                 id="student-modal-title"
-                className="text-2xl font-bold text-gray-900 dark:text-white mb-2"
+                className="text-3xl font-black text-white mb-2 drop-shadow-lg"
+                style={{ textShadow: '2px 2px 4px rgba(0,0,0,0.3)' }}
               >
                 {student.name}
               </h2>
-              <div className="flex flex-wrap gap-2">
-                {/* Status Badge */}
-                <span className={`
-                  inline-flex items-center gap-1 px-3 py-1 rounded-full text-sm font-medium
-                  ${student.checkedIn
-                    ? 'bg-green-100 dark:bg-green-900/40 text-green-800 dark:text-green-300'
-                    : 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400'
-                  }
-                `}>
-                  {student.checkedIn ? (
-                    <>
-                      <CheckCircle size={14} />
-                      Checked In
-                    </>
-                  ) : (
-                    <>
-                      <Clock size={14} />
-                      Not Checked In
-                    </>
-                  )}
-                </span>
-                
-                {/* Instrument Badge */}
+              
+              {/* Badges Row */}
+              <div className="flex flex-wrap gap-2 mt-3">
                 {student.instrument && (
-                  <span className="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-blue-100 dark:bg-blue-900/40 text-blue-800 dark:text-blue-300">
+                  <span className="px-3 py-1 bg-white/90 backdrop-blur-sm rounded-full text-xs font-bold text-gray-800 shadow-md">
                     {student.instrument}
                   </span>
                 )}
-                
-                {/* Section Badge */}
                 {student.section && (
-                  <span className="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-purple-100 dark:bg-purple-900/40 text-purple-800 dark:text-purple-300">
+                  <span className="px-3 py-1 bg-white/90 backdrop-blur-sm rounded-full text-xs font-bold text-gray-800 shadow-md">
                     {student.section}
+                  </span>
+                )}
+                {student.year && (
+                  <span className="px-3 py-1 bg-white/90 backdrop-blur-sm rounded-full text-xs font-bold text-gray-800 shadow-md">
+                    Grade {student.year}
                   </span>
                 )}
               </div>
             </div>
-            
-            <button 
-              onClick={onClose}
-              className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
-              aria-label="Close modal"
-            >
-              <X size={24} className="text-gray-900 dark:text-gray-100" />
-            </button>
           </div>
-        </div>
-        
-        {/* Content */}
-        <div className="p-6 space-y-6">
-          {/* Section B: Today's Event Information */}
-          <div className="bg-blue-50 dark:bg-blue-900/20 rounded-lg p-4 border border-blue-200 dark:border-blue-800">
-            <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-3 flex items-center gap-2">
-              <MapPin size={20} className="text-blue-600 dark:text-blue-400" />
-              Today's Assignment
-            </h3>
-            
-            <div className="space-y-3">
-              {/* Assigned Lot */}
-              <div>
-                <div className="text-sm text-gray-600 dark:text-gray-400 mb-1">Assigned Lot</div>
-                <div className="text-base font-medium text-gray-900 dark:text-white">
-                  {assignedLot ? (
-                    <span className="inline-flex items-center px-3 py-1.5 bg-blue-100 dark:bg-blue-900/40 text-blue-800 dark:text-blue-300 rounded-lg">
-                      {assignedLot.name}
-                    </span>
-                  ) : (
-                    <span className="text-gray-500 dark:text-gray-400">Not Assigned</span>
-                  )}
+          
+          {/* Card Body */}
+          <div className="p-6 space-y-6">
+            {/* Stats Section - Pokemon Style */}
+            <div className="grid grid-cols-2 gap-4">
+              {/* Attendance Rate */}
+              <div className={`
+                bg-gradient-to-br from-gray-50 to-gray-100 dark:from-gray-800 dark:to-gray-700
+                rounded-xl p-4 border-2 border-gray-200 dark:border-gray-600
+                text-center shadow-inner
+              `}>
+                <div className="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-1">
+                  Attendance
+                </div>
+                <div className={`text-4xl font-black ${theme.accent} mb-1`}>
+                  {metrics.percentage}%
+                </div>
+                <div className="text-xs text-gray-600 dark:text-gray-400">
+                  {metrics.attended}/{metrics.eligible}
                 </div>
               </div>
               
               {/* Check-In Status */}
-              <div>
-                <div className="text-sm text-gray-600 dark:text-gray-400 mb-1">Check-In Status</div>
-                <div className="text-base font-medium text-gray-900 dark:text-white">
+              <div className={`
+                bg-gradient-to-br from-gray-50 to-gray-100 dark:from-gray-800 dark:to-gray-700
+                rounded-xl p-4 border-2 border-gray-200 dark:border-gray-600
+                text-center shadow-inner
+              `}>
+                <div className="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-1">
+                  Status
+                </div>
+                <div className="flex items-center justify-center gap-2 mb-1">
                   {student.checkedIn ? (
-                    <span className="inline-flex items-center gap-2 text-green-700 dark:text-green-300">
-                      <CheckCircle size={16} />
-                      Checked In
-                    </span>
+                    <>
+                      <CheckCircle size={24} className="text-green-600 dark:text-green-400" />
+                      <span className="text-lg font-bold text-green-600 dark:text-green-400">In</span>
+                    </>
                   ) : (
-                    <span className="inline-flex items-center gap-2 text-gray-600 dark:text-gray-400">
-                      <Clock size={16} />
-                      Not Checked In
-                    </span>
+                    <>
+                      <Clock size={24} className="text-gray-400" />
+                      <span className="text-lg font-bold text-gray-400">Out</span>
+                    </>
                   )}
                 </div>
+                {assignedLot && (
+                  <div className="text-xs text-gray-600 dark:text-gray-400 truncate">
+                    {assignedLot.name}
+                  </div>
+                )}
+              </div>
+            </div>
+            
+            {/* Event Attendance Blocks - All 7 Events */}
+            <div>
+              <div className="flex items-center gap-2 mb-4">
+                <Calendar size={20} className={theme.accent} />
+                <h3 className="text-lg font-bold text-gray-900 dark:text-white">
+                  Event Attendance
+                </h3>
               </div>
               
-              {/* Check-In Time */}
-              {student.checkedIn && student.checkInTime && (
-                <div>
-                  <div className="text-sm text-gray-600 dark:text-gray-400 mb-1">Check-In Time</div>
-                  <div className="text-base font-medium text-gray-900 dark:text-white">
-                    {format(new Date(student.checkInTime), 'h:mm a')}
+              <div className="grid grid-cols-7 gap-2">
+                {metrics.eventStatus.map((event, index) => {
+                  const isAttended = event.status === 'attended';
+                  const isExcused = event.status === 'excused';
+                  
+                  return (
+                    <motion.div
+                      key={index}
+                      initial={{ scale: 0.8, opacity: 0 }}
+                      animate={{ scale: 1, opacity: 1 }}
+                      transition={{ delay: index * 0.05 }}
+                      className={`
+                        aspect-square rounded-lg
+                        flex flex-col items-center justify-center
+                        border-2 font-bold text-xs
+                        shadow-lg transform transition-all duration-200
+                        hover:scale-110 hover:z-10
+                        ${isAttended
+                          ? 'bg-gradient-to-br from-green-500 to-emerald-600 border-green-400 text-white'
+                          : isExcused
+                            ? 'bg-gradient-to-br from-yellow-400 to-amber-500 border-yellow-300 text-white'
+                            : 'bg-gradient-to-br from-red-500 to-rose-600 border-red-400 text-white'
+                        }
+                      `}
+                      title={`${event.label} - ${event.status === 'attended' ? 'Attended' : event.status === 'excused' ? 'Excused' : 'Absent'}`}
+                    >
+                      {isAttended ? (
+                        <CheckCircle size={20} className="mb-1" />
+                      ) : isExcused ? (
+                        <Award size={20} className="mb-1" />
+                      ) : (
+                        <X size={20} className="mb-1 opacity-75" />
+                      )}
+                      <span className="text-[10px] leading-tight text-center px-1">
+                        {event.label.split(' ')[0]}
+                      </span>
+                      <span className="text-[9px] leading-tight">
+                        {event.label.split(' ')[1]}
+                      </span>
+                    </motion.div>
+                  );
+                })}
+              </div>
+              
+              {/* Legend */}
+              <div className="flex justify-center gap-4 mt-4 text-xs">
+                <div className="flex items-center gap-1">
+                  <div className="w-3 h-3 rounded bg-gradient-to-br from-green-500 to-emerald-600 border border-green-400"></div>
+                  <span className="text-gray-600 dark:text-gray-400">Attended</span>
+                </div>
+                <div className="flex items-center gap-1">
+                  <div className="w-3 h-3 rounded bg-gradient-to-br from-yellow-400 to-amber-500 border border-yellow-300"></div>
+                  <span className="text-gray-600 dark:text-gray-400">Excused</span>
+                </div>
+                <div className="flex items-center gap-1">
+                  <div className="w-3 h-3 rounded bg-gradient-to-br from-red-500 to-rose-600 border border-red-400"></div>
+                  <span className="text-gray-600 dark:text-gray-400">Absent</span>
+                </div>
+              </div>
+            </div>
+            
+            {/* Additional Info Section */}
+            {assignedLot && (
+              <div className={`
+                bg-gradient-to-br from-blue-50 to-indigo-50 dark:from-blue-900/20 dark:to-indigo-900/20
+                rounded-xl p-4 border-2 border-blue-200 dark:border-blue-800
+              `}>
+                <div className="flex items-center gap-2 mb-2">
+                  <MapPin size={18} className="text-blue-600 dark:text-blue-400" />
+                  <span className="text-sm font-bold text-gray-700 dark:text-gray-300">Assigned Lot</span>
+                </div>
+                <div className="text-base font-semibold text-gray-900 dark:text-white">
+                  {assignedLot.name}
+                </div>
+              </div>
+            )}
+            
+            {/* Footer Stats */}
+            <div className="flex justify-between items-center pt-4 border-t-2 border-gray-200 dark:border-gray-700">
+              <div className="text-center">
+                <div className="text-2xl font-black text-gray-900 dark:text-white">
+                  {metrics.attended}
+                </div>
+                <div className="text-xs text-gray-500 dark:text-gray-400">Events</div>
+              </div>
+              <div className="text-center">
+                <div className="text-2xl font-black text-gray-900 dark:text-white">
+                  {metrics.eligible}
+                </div>
+                <div className="text-xs text-gray-500 dark:text-gray-400">Eligible</div>
+              </div>
+              {metrics.excused > 0 && (
+                <div className="text-center">
+                  <div className="text-2xl font-black text-yellow-600 dark:text-yellow-400">
+                    {metrics.excused}
                   </div>
+                  <div className="text-xs text-gray-500 dark:text-gray-400">Excused</div>
                 </div>
               )}
             </div>
-          </div>
-          
-          {/* Section C: Attendance Summary Statistics */}
-          <div className="bg-gradient-to-br from-purple-50 to-pink-50 dark:from-purple-900/20 dark:to-pink-900/20 rounded-lg p-4 border border-purple-200 dark:border-purple-800">
-            <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4 flex items-center gap-2">
-              <TrendingUp size={20} className="text-purple-600 dark:text-purple-400" />
-              Attendance Summary
-            </h3>
-            
-            <div className="grid grid-cols-2 gap-4 mb-4">
-              {/* Total Events Attended */}
-              <div className="bg-white dark:bg-gray-800 rounded-lg p-3">
-                <div className="text-sm text-gray-600 dark:text-gray-400 mb-1">Events Attended</div>
-                <div className="text-3xl font-bold text-purple-600 dark:text-purple-400">
-                  {metrics.attended}
-                </div>
-                <div className="text-xs text-gray-500 dark:text-gray-500">
-                  out of {metrics.eligible} eligible
-                </div>
-              </div>
-              
-              {/* Attendance Percentage */}
-              <div className="bg-white dark:bg-gray-800 rounded-lg p-3">
-                <div className="text-sm text-gray-600 dark:text-gray-400 mb-1">Attendance Rate</div>
-                <div className="text-3xl font-bold text-purple-600 dark:text-purple-400">
-                  {metrics.percentage}%
-                </div>
-                <div className="text-xs text-gray-500 dark:text-gray-500">
-                  {metrics.excused > 0 && `${metrics.excused} excused`}
-                </div>
-              </div>
-            </div>
-            
-            {/* Progress Bar */}
-            <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-3 overflow-hidden">
-              <div 
-                className={`h-full ${getProgressColor(metrics.percentage)} transition-all duration-500`}
-                style={{ width: `${metrics.percentage}%` }}
-              />
-            </div>
-          </div>
-          
-          {/* Section D: Attendance History List */}
-          <div>
-            <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-3 flex items-center gap-2">
-              <Calendar size={20} className="text-gray-600 dark:text-gray-400" />
-              Attendance History
-            </h3>
-            
-            {metrics.attendedEvents.length > 0 || metrics.excusedEvents.length > 0 ? (
-              <div className="space-y-2 max-h-64 overflow-y-auto">
-                {/* Attended Events */}
-                {metrics.attendedEvents.map((event, index) => (
-                  <div 
-                    key={`attended-${index}`}
-                    className="flex items-center gap-3 p-3 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg"
-                  >
-                    <CheckCircle size={18} className="text-green-600 dark:text-green-400 flex-shrink-0" />
-                    <div className="flex-1">
-                      <div className="font-medium text-gray-900 dark:text-white">
-                        {format(event.date, 'EEEE, MMM d, yyyy')}
-                      </div>
-                      <div className="text-sm text-gray-600 dark:text-gray-400">
-                        Attended
-                      </div>
-                    </div>
-                  </div>
-                ))}
-                
-                {/* Excused Events */}
-                {metrics.excusedEvents.map((event, index) => (
-                  <div 
-                    key={`excused-${index}`}
-                    className="flex items-center gap-3 p-3 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg"
-                  >
-                    <Award size={18} className="text-blue-600 dark:text-blue-400 flex-shrink-0" />
-                    <div className="flex-1">
-                      <div className="font-medium text-gray-900 dark:text-white">
-                        {format(event.date, 'EEEE, MMM d, yyyy')}
-                      </div>
-                      <div className="text-sm text-gray-600 dark:text-gray-400">
-                        Excused
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <div className="text-center py-8 text-gray-500 dark:text-gray-400">
-                <Calendar size={48} className="mx-auto mb-2 opacity-40" />
-                <p>No attendance records yet</p>
-              </div>
-            )}
           </div>
         </div>
       </MotionDiv>
@@ -348,4 +388,3 @@ const StudentDetailsModal = ({ student, lots, onClose }) => {
 };
 
 export default StudentDetailsModal;
-
