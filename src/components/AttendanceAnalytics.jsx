@@ -6,7 +6,7 @@
 import React, { useMemo, useEffect, useState } from 'react';
 import { Users, TrendingUp, Award, BarChart3, X } from 'lucide-react';
 import { motion } from 'framer-motion';
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell, ReferenceLine, LabelList } from 'recharts';
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell, ReferenceLine, LabelList, Legend, LineChart, Line, ComposedChart } from 'recharts';
 
 const AttendanceAnalytics = ({ students }) => {
   const [selectedInstrument, setSelectedInstrument] = useState(null);
@@ -172,6 +172,76 @@ const AttendanceAnalytics = ({ students }) => {
       ? (totalActualAttendances / numPastEvents).toFixed(1)
       : 0;
 
+    // Grade-based attendance statistics (9-12)
+    const gradeStats = {};
+    const grades = [9, 10, 11, 12];
+    
+    // Initialize grade stats
+    grades.forEach(grade => {
+      gradeStats[grade] = {
+        totalStudents: 0,
+        weeklyAttendance: eventFields.map((field, index) => {
+          return {
+            event: index + 1,
+            eventDate: formatEventDate(eventDates[index]),
+            attended: 0,
+            eligible: 0,
+            excused: 0
+          };
+        }),
+        ytdAttended: 0,
+        ytdEligible: 0,
+        ytdExcused: 0
+      };
+    });
+    
+    // Calculate grade-based stats
+    students.forEach(s => {
+      // Get grade from year or grade field
+      const studentGrade = parseInt(s.year || s.grade || '0');
+      if (!grades.includes(studentGrade)) return; // Skip if not 9-12
+      
+      gradeStats[studentGrade].totalStudents++;
+      
+      // Calculate weekly attendance
+      eventFields.forEach((field, index) => {
+        const value = s[field];
+        if (value === 'X' || value === 'x') {
+          gradeStats[studentGrade].weeklyAttendance[index].attended++;
+          gradeStats[studentGrade].weeklyAttendance[index].eligible++;
+          gradeStats[studentGrade].ytdAttended++;
+          gradeStats[studentGrade].ytdEligible++;
+        } else if (value === 'EX' || value === 'ex' || value === 'Ex') {
+          gradeStats[studentGrade].weeklyAttendance[index].excused++;
+          gradeStats[studentGrade].ytdExcused++;
+          // Excused doesn't count as eligible
+        } else {
+          // Absent
+          gradeStats[studentGrade].weeklyAttendance[index].eligible++;
+          gradeStats[studentGrade].ytdEligible++;
+        }
+      });
+    });
+    
+    // Calculate percentages for weekly and YTD
+    const gradeAttendanceData = grades.map(grade => {
+      const stats = gradeStats[grade];
+      const weeklyData = stats.weeklyAttendance.map(week => ({
+        ...week,
+        percentage: week.eligible > 0 ? Math.round((week.attended / week.eligible) * 100) : 0
+      }));
+      
+      return {
+        grade,
+        totalStudents: stats.totalStudents,
+        weeklyAttendance: weeklyData,
+        ytdAttended: stats.ytdAttended,
+        ytdEligible: stats.ytdEligible,
+        ytdExcused: stats.ytdExcused,
+        ytdPercentage: stats.ytdEligible > 0 ? Math.round((stats.ytdAttended / stats.ytdEligible) * 100) : 0
+      };
+    });
+
     return {
       eventAttendance,
       instrumentComparison,
@@ -180,7 +250,8 @@ const AttendanceAnalytics = ({ students }) => {
       totalPossibleAttendances,
       numPastEvents,
       avgCleanupAttendance,
-      eventDates: eventDates // Include event dates for modal
+      eventDates: eventDates, // Include event dates for modal
+      gradeAttendanceData // New: grade-based attendance data
     };
   }, [students]);
 
@@ -376,6 +447,231 @@ const AttendanceAnalytics = ({ students }) => {
           </div>
         </div>
 
+      </div>
+
+      {/* Attendance by Grade Section */}
+      <div className="bg-white dark:bg-gray-800 p-6 rounded-lg border border-gray-200 dark:border-gray-700">
+        <h3 className="text-lg font-bold text-gray-900 dark:text-white mb-6 flex items-center gap-2">
+          <Users size={20} />
+          Attendance by Grade (9-12)
+        </h3>
+        
+        {/* YTD Summary Cards */}
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+          {analytics.gradeAttendanceData.map((gradeData) => (
+            <div
+              key={gradeData.grade}
+              className="bg-gradient-to-br from-blue-50 to-purple-50 dark:from-blue-900/20 dark:to-purple-900/20 p-4 rounded-lg border border-blue-200 dark:border-blue-800"
+            >
+              <div className="text-center">
+                <div className="text-2xl font-bold text-blue-600 dark:text-blue-400 mb-1">
+                  Grade {gradeData.grade}
+                </div>
+                <div className="text-3xl font-bold text-gray-900 dark:text-white mb-2">
+                  {gradeData.ytdPercentage}%
+                </div>
+                <div className="text-sm text-gray-600 dark:text-gray-400 mb-1">
+                  {gradeData.ytdAttended} / {gradeData.ytdEligible} attended
+                </div>
+                <div className="text-xs text-gray-500 dark:text-gray-500">
+                  {gradeData.totalStudents} student{gradeData.totalStudents !== 1 ? 's' : ''}
+                  {gradeData.ytdExcused > 0 && (
+                    <span className="ml-1">({gradeData.ytdExcused} excused)</span>
+                  )}
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {/* Weekly Attendance Chart by Grade */}
+        <div className="mb-6">
+          <h4 className="text-md font-semibold text-gray-700 dark:text-gray-300 mb-4">
+            Week-by-Week Attendance by Grade
+          </h4>
+          <ResponsiveContainer width="100%" height={400}>
+            <ComposedChart 
+              data={analytics.eventAttendance.map((event, eventIndex) => {
+                const chartData = {
+                  eventDate: event.eventDate,
+                  event: event.event
+                };
+                // Add grade-specific data for each event
+                analytics.gradeAttendanceData.forEach(gradeData => {
+                  const weekData = gradeData.weeklyAttendance[eventIndex];
+                  chartData[`grade${gradeData.grade}Attended`] = weekData?.attended || 0;
+                  chartData[`grade${gradeData.grade}Percentage`] = weekData?.percentage || 0;
+                });
+                return chartData;
+              })}
+            >
+              <CartesianGrid strokeDasharray="3 3" className="stroke-gray-300 dark:stroke-gray-700" />
+              <XAxis 
+                dataKey="eventDate" 
+                className="text-xs"
+                tick={{ fill: 'currentColor' }}
+              />
+              <YAxis 
+                yAxisId="left"
+                label={{ value: 'Students', angle: -90, position: 'insideLeft' }}
+                tick={{ fill: 'currentColor' }}
+              />
+              <YAxis 
+                yAxisId="right"
+                orientation="right"
+                label={{ value: 'Percentage', angle: 90, position: 'insideRight' }}
+                tick={{ fill: 'currentColor' }}
+                domain={[0, 100]}
+              />
+              <Tooltip 
+                contentStyle={{ 
+                  backgroundColor: 'var(--bg-color, white)',
+                  border: '1px solid var(--border-color, #e5e7eb)',
+                  borderRadius: '0.5rem'
+                }}
+                formatter={(value, name, props) => {
+                  if (name.includes('Grade') && name.includes('Count')) {
+                    const grade = parseInt(name.match(/Grade (\d+)/)?.[1] || '0');
+                    const gradeData = analytics.gradeAttendanceData.find(g => g.grade === grade);
+                    if (gradeData && props.payload) {
+                      const eventDate = props.payload.eventDate;
+                      const eventIndex = analytics.eventAttendance.findIndex(e => e.eventDate === eventDate);
+                      if (eventIndex >= 0) {
+                        const weekData = gradeData.weeklyAttendance[eventIndex];
+                        if (weekData) {
+                          return [`${weekData.attended} / ${weekData.eligible} (${weekData.percentage}%)`, name];
+                        }
+                      }
+                    }
+                    return [value, name];
+                  } else if (name.includes('Grade') && name.includes('%')) {
+                    return [`${value}%`, name];
+                  }
+                  return [value, name];
+                }}
+              />
+              <Legend />
+              {analytics.gradeAttendanceData.map((gradeData, index) => {
+                const colors = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444'];
+                const color = colors[index % colors.length];
+                return (
+                  <Bar
+                    key={`grade-${gradeData.grade}`}
+                    yAxisId="left"
+                    dataKey={`grade${gradeData.grade}Attended`}
+                    name={`Grade ${gradeData.grade} (Count)`}
+                    fill={color}
+                    opacity={0.7}
+                    radius={[4, 4, 0, 0]}
+                  />
+                );
+              })}
+              {analytics.gradeAttendanceData.map((gradeData, index) => {
+                const colors = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444'];
+                const color = colors[index % colors.length];
+                return (
+                  <Line
+                    key={`grade-${gradeData.grade}-line`}
+                    yAxisId="right"
+                    type="monotone"
+                    dataKey={`grade${gradeData.grade}Percentage`}
+                    name={`Grade ${gradeData.grade} (%)`}
+                    stroke={color}
+                    strokeWidth={2}
+                    dot={{ fill: color, r: 4 }}
+                  />
+                );
+              })}
+            </ComposedChart>
+          </ResponsiveContainer>
+        </div>
+
+        {/* Detailed Grade Table */}
+        <div className="overflow-x-auto">
+          <h4 className="text-md font-semibold text-gray-700 dark:text-gray-300 mb-4">
+            Detailed Breakdown by Grade
+          </h4>
+          <table className="w-full border-collapse text-sm">
+            <thead>
+              <tr className="bg-gray-100 dark:bg-gray-700">
+                <th className="border border-gray-300 dark:border-gray-600 px-4 py-2 text-left font-semibold text-gray-900 dark:text-white">
+                  Grade
+                </th>
+                <th className="border border-gray-300 dark:border-gray-600 px-4 py-2 text-center font-semibold text-gray-900 dark:text-white">
+                  Students
+                </th>
+                {analytics.eventAttendance.map((event) => (
+                  <th
+                    key={event.event}
+                    className="border border-gray-300 dark:border-gray-600 px-2 py-2 text-center text-xs font-semibold text-gray-900 dark:text-white"
+                    title={event.eventDate}
+                  >
+                    {event.eventDate}
+                  </th>
+                ))}
+                <th className="border border-gray-300 dark:border-gray-600 px-4 py-2 text-center font-semibold text-gray-900 dark:text-white">
+                  YTD Total
+                </th>
+                <th className="border border-gray-300 dark:border-gray-600 px-4 py-2 text-center font-semibold text-gray-900 dark:text-white">
+                  YTD %
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              {analytics.gradeAttendanceData.map((gradeData) => (
+                <tr
+                  key={gradeData.grade}
+                  className="hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors"
+                >
+                  <td className="border border-gray-300 dark:border-gray-600 px-4 py-2 font-semibold text-gray-900 dark:text-white">
+                    Grade {gradeData.grade}
+                  </td>
+                  <td className="border border-gray-300 dark:border-gray-600 px-4 py-2 text-center text-gray-700 dark:text-gray-300">
+                    {gradeData.totalStudents}
+                  </td>
+                  {gradeData.weeklyAttendance.map((week, index) => (
+                    <td
+                      key={index}
+                      className="border border-gray-300 dark:border-gray-600 px-2 py-2 text-center"
+                    >
+                      <div className="text-xs">
+                        <div className="font-semibold text-gray-900 dark:text-white">
+                          {week.attended} / {week.eligible}
+                        </div>
+                        <div className={`text-xs ${
+                          week.percentage >= 70
+                            ? 'text-green-600 dark:text-green-400'
+                            : week.percentage >= 50
+                              ? 'text-yellow-600 dark:text-yellow-400'
+                              : 'text-red-600 dark:text-red-400'
+                        }`}>
+                          {week.percentage}%
+                        </div>
+                        {week.excused > 0 && (
+                          <div className="text-xs text-gray-500 dark:text-gray-500">
+                            ({week.excused} EX)
+                          </div>
+                        )}
+                      </div>
+                    </td>
+                  ))}
+                  <td className="border border-gray-300 dark:border-gray-600 px-4 py-2 text-center font-semibold text-gray-900 dark:text-white">
+                    {gradeData.ytdAttended} / {gradeData.ytdEligible}
+                  </td>
+                  <td className={`border border-gray-300 dark:border-gray-600 px-4 py-2 text-center font-bold text-lg ${
+                    gradeData.ytdPercentage >= 70
+                      ? 'text-green-600 dark:text-green-400'
+                      : gradeData.ytdPercentage >= 50
+                        ? 'text-yellow-600 dark:text-yellow-400'
+                        : 'text-red-600 dark:text-red-400'
+                  }`}>
+                    {gradeData.ytdPercentage}%
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       </div>
 
       {/* Instrument Detail Modal */}
