@@ -11,6 +11,13 @@ import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContaine
 const AttendanceAnalytics = ({ students }) => {
   const [selectedInstrument, setSelectedInstrument] = useState(null);
   const [showInstrumentModal, setShowInstrumentModal] = useState(false);
+  // Track which grades are visible in the chart
+  const [visibleGrades, setVisibleGrades] = useState({
+    9: true,
+    10: true,
+    11: true,
+    12: true
+  });
 
   // Debug: Log students data
   useEffect(() => {
@@ -495,7 +502,7 @@ const AttendanceAnalytics = ({ students }) => {
         {/* Weekly Attendance Chart by Grade */}
         <div className="mb-6">
           <h4 className="text-md font-semibold text-gray-700 dark:text-gray-300 mb-4">
-            Week-by-Week Attendance by Grade
+            Event-by-Event Attendance
           </h4>
           <ResponsiveContainer width="100%" height={400}>
             <ComposedChart 
@@ -558,8 +565,63 @@ const AttendanceAnalytics = ({ students }) => {
                   return [value, name];
                 }}
               />
-              <Legend />
+              <Legend 
+                content={({ payload }) => {
+                  // Group payload by grade (combine Count and % entries)
+                  const gradeEntries = {};
+                  payload?.forEach(entry => {
+                    const gradeMatch = entry.dataKey?.match(/grade(\d+)/);
+                    if (gradeMatch) {
+                      const grade = parseInt(gradeMatch[1]);
+                      if (!gradeEntries[grade]) {
+                        gradeEntries[grade] = entry; // Use the first entry (Count) as the representative
+                      }
+                    }
+                  });
+                  
+                  return (
+                    <div className="flex flex-wrap justify-center gap-4 mt-4">
+                      {Object.entries(gradeEntries).map(([grade, entry]) => {
+                        const gradeNum = parseInt(grade);
+                        const isVisible = visibleGrades[gradeNum];
+                        return (
+                          <div
+                            key={grade}
+                            onClick={() => {
+                              setVisibleGrades(prev => ({
+                                ...prev,
+                                [gradeNum]: !prev[gradeNum]
+                              }));
+                            }}
+                            className={`
+                              flex items-center gap-2 px-3 py-1.5 rounded-md cursor-pointer
+                              transition-all duration-200
+                              ${isVisible 
+                                ? 'bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600' 
+                                : 'bg-gray-50 dark:bg-gray-800 opacity-50 hover:opacity-70'
+                              }
+                            `}
+                            style={{ borderLeft: `4px solid ${entry.color}` }}
+                          >
+                            <div
+                              className="w-3 h-3 rounded"
+                              style={{ backgroundColor: entry.color }}
+                            />
+                            <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                              Grade {grade}
+                            </span>
+                            {!isVisible && (
+                              <span className="text-xs text-gray-500">(hidden)</span>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  );
+                }}
+              />
               {analytics.gradeAttendanceData.map((gradeData, index) => {
+                if (!visibleGrades[gradeData.grade]) return null;
                 const colors = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444'];
                 const color = colors[index % colors.length];
                 return (
@@ -575,6 +637,7 @@ const AttendanceAnalytics = ({ students }) => {
                 );
               })}
               {analytics.gradeAttendanceData.map((gradeData, index) => {
+                if (!visibleGrades[gradeData.grade]) return null;
                 const colors = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444'];
                 const color = colors[index % colors.length];
                 return (
