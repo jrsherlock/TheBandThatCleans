@@ -80,23 +80,36 @@ const AttendanceAnalytics = ({ students }) => {
       return `${month}. ${day}`;
     };
 
-    // Event-by-event attendance
+    // Identify season-exempt students (have "EX" in ANY event field)
+    // These students are exempt for the entire season and should be excluded from all calculations
+    const seasonExemptStudents = students.filter(s => {
+      return eventFields.some(field => {
+        const val = s[field];
+        return val === 'EX' || val === 'ex' || val === 'Ex';
+      });
+    });
+    
+    // Filter out exempt students - only work with eligible students
+    const eligibleStudents = students.filter(s => {
+      return !eventFields.some(field => {
+        const val = s[field];
+        return val === 'EX' || val === 'ex' || val === 'Ex';
+      });
+    });
+
+    // Event-by-event attendance (only counting eligible students)
     const eventAttendance = eventFields.map((field, index) => {
-      const attended = students.filter(s => {
+      const attended = eligibleStudents.filter(s => {
         const val = s[field];
         return val === 'X' || val === 'x';
       }).length;
-      const excused = students.filter(s => {
-        const val = s[field];
-        return val === 'EX' || val === 'ex' || val === 'Ex';
-      }).length;
-      const total = students.length;
-      const eligible = total - excused; // Exclude excused students from denominator
+      const total = eligibleStudents.length; // Only count eligible students
+      const eligible = total; // All eligible students are counted
       return {
         event: index + 1,
         eventDate: formatEventDate(eventDates[index]),
         attended,
-        excused,
+        excused: 0, // No per-event excused count (exempt students already filtered out)
         total,
         eligible,
         percentage: eligible > 0 ? Math.round((attended / eligible) * 100) : 0
@@ -105,8 +118,9 @@ const AttendanceAnalytics = ({ students }) => {
 
     // Instrument comparison - Competition to see which instrument has highest attendance
     // FIXED: Only count past events in the calculation
+    // Only count eligible students (exempt students already filtered out)
     const instrumentStats = {};
-    students.forEach(s => {
+    eligibleStudents.forEach(s => {
       const instrument = s.instrument || 'Unknown';
       if (!instrumentStats[instrument]) {
         instrumentStats[instrument] = {
@@ -123,11 +137,8 @@ const AttendanceAnalytics = ({ students }) => {
         if (value === 'X' || value === 'x') {
           instrumentStats[instrument].totalAttended++;
           instrumentStats[instrument].totalEligible++;
-        } else if (value === 'EX' || value === 'ex' || value === 'Ex') {
-          // Excused - don't count as attended, but also don't count against them
-          // Do nothing - this event doesn't count for or against
         } else {
-          // Absent - counts against them
+          // Absent - counts against them (no excused here, already filtered out)
           instrumentStats[instrument].totalEligible++;
         }
       });
@@ -144,25 +155,22 @@ const AttendanceAnalytics = ({ students }) => {
     })).sort((a, b) => b.avgAttendance - a.avgAttendance);
 
 
-    // Overall stats - calculate total attendances from all students
+    // Overall stats - calculate total attendances from eligible students only
     // FIXED: Only count past events, not all 7 events
     let totalActualAttendances = 0;
-    let totalExcused = 0;
-    students.forEach(s => {
+    eligibleStudents.forEach(s => {
       // Only count past events
       pastEventFields.forEach(field => {
         const value = s[field];
         if (value === 'X' || value === 'x') {
           totalActualAttendances++;
-        } else if (value === 'EX' || value === 'ex' || value === 'Ex') {
-          totalExcused++;
         }
+        // No excused counting here - exempt students already filtered out
       });
     });
 
-    // Use numPastEvents instead of hardcoded 7
-    const totalPossibleAttendances = students.length * numPastEvents;
-    const totalEligibleAttendances = totalPossibleAttendances - totalExcused;
+    // Use numPastEvents and only eligible students
+    const totalEligibleAttendances = eligibleStudents.length * numPastEvents;
     const overallAttendanceRate = totalEligibleAttendances > 0
       ? Math.round((totalActualAttendances / totalEligibleAttendances) * 100)
       : 0;
@@ -173,6 +181,7 @@ const AttendanceAnalytics = ({ students }) => {
       : 0;
 
     // Grade-based attendance statistics (9-12)
+    // Only count eligible students (exempt students already filtered out)
     const gradeStats = {};
     const grades = [9, 10, 11, 12];
     
@@ -186,17 +195,17 @@ const AttendanceAnalytics = ({ students }) => {
             eventDate: formatEventDate(eventDates[index]),
             attended: 0,
             eligible: 0,
-            excused: 0
+            excused: 0 // No per-event excused (exempt students filtered out)
           };
         }),
         ytdAttended: 0,
         ytdEligible: 0,
-        ytdExcused: 0
+        ytdExcused: 0 // No YTD excused count (exempt students filtered out)
       };
     });
     
-    // Calculate grade-based stats
-    students.forEach(s => {
+    // Calculate grade-based stats - only from eligible students
+    eligibleStudents.forEach(s => {
       // Get grade from year or grade field
       const studentGrade = parseInt(s.year || s.grade || '0');
       if (!grades.includes(studentGrade)) return; // Skip if not 9-12
@@ -211,12 +220,8 @@ const AttendanceAnalytics = ({ students }) => {
           gradeStats[studentGrade].weeklyAttendance[index].eligible++;
           gradeStats[studentGrade].ytdAttended++;
           gradeStats[studentGrade].ytdEligible++;
-        } else if (value === 'EX' || value === 'ex' || value === 'Ex') {
-          gradeStats[studentGrade].weeklyAttendance[index].excused++;
-          gradeStats[studentGrade].ytdExcused++;
-          // Excused doesn't count as eligible
         } else {
-          // Absent
+          // Absent (no excused here - exempt students already filtered out)
           gradeStats[studentGrade].weeklyAttendance[index].eligible++;
           gradeStats[studentGrade].ytdEligible++;
         }
@@ -237,7 +242,6 @@ const AttendanceAnalytics = ({ students }) => {
         weeklyAttendance: weeklyData,
         ytdAttended: stats.ytdAttended,
         ytdEligible: stats.ytdEligible,
-        ytdExcused: stats.ytdExcused,
         ytdPercentage: stats.ytdEligible > 0 ? Math.round((stats.ytdAttended / stats.ytdEligible) * 100) : 0
       };
     });
@@ -247,11 +251,13 @@ const AttendanceAnalytics = ({ students }) => {
       instrumentComparison,
       overallAttendanceRate,
       totalActualAttendances,
-      totalPossibleAttendances,
+      totalPossibleAttendances: totalEligibleAttendances, // Updated to use eligible only
       numPastEvents,
       avgCleanupAttendance,
       eventDates: eventDates, // Include event dates for modal
-      gradeAttendanceData // New: grade-based attendance data
+      gradeAttendanceData, // New: grade-based attendance data
+      seasonExemptCount: seasonExemptStudents.length, // Count of season-exempt students
+      eligibleStudentCount: eligibleStudents.length // Count of eligible students
     };
   }, [students]);
 
@@ -323,9 +329,14 @@ const AttendanceAnalytics = ({ students }) => {
           </div>
           <div className="text-center">
             <div className="text-3xl font-bold text-purple-600 dark:text-purple-400">
-              {students.length}
+              {analytics.eligibleStudentCount}
             </div>
-            <div className="text-sm text-gray-600 dark:text-gray-400">Total Students</div>
+            <div className="text-sm text-gray-600 dark:text-gray-400">Eligible Students</div>
+            {analytics.seasonExemptCount > 0 && (
+              <div className="text-xs text-gray-500 dark:text-gray-500 mt-1">
+                ({analytics.seasonExemptCount} season-exempt)
+              </div>
+            )}
           </div>
         </div>
       </div>
@@ -474,10 +485,7 @@ const AttendanceAnalytics = ({ students }) => {
                   {gradeData.ytdAttended} / {gradeData.ytdEligible} attended
                 </div>
                 <div className="text-xs text-gray-500 dark:text-gray-500">
-                  {gradeData.totalStudents} student{gradeData.totalStudents !== 1 ? 's' : ''}
-                  {gradeData.ytdExcused > 0 && (
-                    <span className="ml-1">({gradeData.ytdExcused} excused)</span>
-                  )}
+                  {gradeData.totalStudents} eligible student{gradeData.totalStudents !== 1 ? 's' : ''}
                 </div>
               </div>
             </div>
@@ -647,11 +655,6 @@ const AttendanceAnalytics = ({ students }) => {
                         }`}>
                           {week.percentage}%
                         </div>
-                        {week.excused > 0 && (
-                          <div className="text-xs text-gray-500 dark:text-gray-500">
-                            ({week.excused} EX)
-                          </div>
-                        )}
                       </div>
                     </td>
                   ))}
